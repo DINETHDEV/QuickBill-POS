@@ -4,6 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 require('dotenv').config();
 const cloudinary = require('cloudinary').v2;
 
@@ -28,7 +29,6 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB Connected to:', MONGO_URI.includes('@') ? MONGO_URI.split('@')[1].split('/')[0] : 'localhost'))
   .catch(err => {
     console.error('CRITICAL: MongoDB connection error:', err);
-    process.exit(1); 
   });
 
 // --- Schemas & Models ---
@@ -141,7 +141,10 @@ const onlineOrderSchema = new mongoose.Schema({
 const OnlineOrder = mongoose.model('OnlineOrder', onlineOrderSchema);
 
 // --- File Upload Setup ---
-const uploadDir = path.join(__dirname, 'public', 'uploads');
+const uploadDir = process.env.NODE_ENV === 'production' || process.env.VERCEL 
+  ? os.tmpdir() 
+  : path.join(__dirname, 'public', 'uploads');
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
