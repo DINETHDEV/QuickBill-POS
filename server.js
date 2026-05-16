@@ -23,13 +23,30 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// MongoDB Connection
+// MongoDB Connection configuration for Serverless
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/quickbill';
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB Connected to:', MONGO_URI.includes('@') ? MONGO_URI.split('@')[1].split('/')[0] : 'localhost'))
-  .catch(err => {
+
+const connectDB = async () => {
+  if (mongoose.connection.readyState >= 1) return;
+  try {
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 5000 // Timeout after 5s instead of 30s
+    });
+    console.log('MongoDB Connected to:', MONGO_URI.includes('@') ? MONGO_URI.split('@')[1].split('/')[0] : 'localhost');
+  } catch (err) {
     console.error('CRITICAL: MongoDB connection error:', err);
-  });
+  }
+};
+
+// Middleware to ensure DB connection before handling API routes
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Database connection failed: ' + err.message });
+  }
+});
 
 // --- Schemas & Models ---
 
