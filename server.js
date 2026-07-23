@@ -1,10 +1,10 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const sqlite3 = require('sqlite3').verbose();
 require('dotenv').config();
 const cloudinary = require('cloudinary').v2;
 
@@ -23,139 +23,163 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// MongoDB Connection configuration for Serverless
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/quickbill';
+// --- SQLite Database Setup ---
+const dbPath = path.join(__dirname, 'quickbill.sqlite');
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('❌ SQLite connection error:', err.message);
+  } else {
+    console.log('✅ SQLite Database Connected:', dbPath);
+  }
+});
 
-const connectDB = async () => {
-  if (mongoose.connection.readyState >= 1) return;
+// Promisified SQL helpers
+const run = (sql, params = []) => new Promise((resolve, reject) => {
+  db.run(sql, params, function(err) {
+    if (err) reject(err);
+    else resolve(this);
+  });
+});
+
+const get = (sql, params = []) => new Promise((resolve, reject) => {
+  db.get(sql, params, (err, row) => {
+    if (err) reject(err);
+    else resolve(row);
+  });
+});
+
+const all = (sql, params = []) => new Promise((resolve, reject) => {
+  db.all(sql, params, (err, rows) => {
+    if (err) reject(err);
+    else resolve(rows);
+  });
+});
+
+// Initialize Database Tables
+const initDB = async () => {
   try {
-    await mongoose.connect(MONGO_URI, {
-      serverSelectionTimeoutMS: 5000 // Timeout after 5s instead of 30s
-    });
-    console.log('MongoDB Connected to:', MONGO_URI.includes('@') ? MONGO_URI.split('@')[1].split('/')[0] : 'localhost');
+    await run(`CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      _id TEXT,
+      name TEXT,
+      price REAL,
+      image TEXT,
+      size TEXT,
+      color TEXT,
+      stock INTEGER DEFAULT 0,
+      isFeatured INTEGER DEFAULT 0,
+      category TEXT
+    )`);
+
+    await run(`CREATE TABLE IF NOT EXISTS sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      _id TEXT,
+      invoiceNumber TEXT,
+      customerName TEXT DEFAULT 'Walking Customer',
+      customerPhone TEXT DEFAULT '',
+      deliveryAddress TEXT DEFAULT '',
+      source TEXT DEFAULT 'pos',
+      onlineOrderId TEXT DEFAULT '',
+      items TEXT,
+      totalAmount REAL,
+      totalProfit REAL,
+      date TEXT
+    )`);
+
+    await run(`CREATE TABLE IF NOT EXISTS settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shopName TEXT DEFAULT 'Wasana Supermarket & Retail',
+      shopLogo TEXT DEFAULT '',
+      shopPhone TEXT DEFAULT '011 234 5678',
+      whatsappNumber TEXT DEFAULT '077 123 4567',
+      shopAddress TEXT DEFAULT 'No. 120, Galle Road, Colombo 03, Sri Lanka',
+      shopEmail TEXT DEFAULT 'info@wasanasuper.lk',
+      showLogoOnInvoice INTEGER DEFAULT 1,
+      showPhoneOnInvoice INTEGER DEFAULT 1,
+      enableOnlineShop INTEGER DEFAULT 1,
+      showProductImages INTEGER DEFAULT 1,
+      showOutOfStock INTEGER DEFAULT 0,
+      showWhatsappOrderBtn INTEGER DEFAULT 1,
+      themeColor TEXT DEFAULT '#00a86b',
+      bannerMessage TEXT DEFAULT 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available',
+      invoicePrefix TEXT DEFAULT 'QB-',
+      currency TEXT DEFAULT 'Rs.',
+      autoInvoiceNumber INTEGER DEFAULT 1,
+      showAddressOnInvoice INTEGER DEFAULT 1,
+      logo TEXT DEFAULT '',
+      coverImage TEXT DEFAULT '',
+      facebookUrl TEXT DEFAULT 'https://facebook.com',
+      instagramUrl TEXT DEFAULT 'https://instagram.com',
+      aboutText TEXT DEFAULT 'Welcome to Wasana Supermarket! We provide high quality products across Sri Lanka.',
+      bankName TEXT DEFAULT 'Commercial Bank of Ceylon',
+      accountName TEXT DEFAULT 'Wasana Supermarket (Pvt) Ltd',
+      accountNumber TEXT DEFAULT '1000 458 921',
+      bankBranch TEXT DEFAULT 'Kollupitiya Branch',
+      bankNote TEXT DEFAULT 'Please upload your bank payment slip to confirm your order.'
+    )`);
+
+    await run(`CREATE TABLE IF NOT EXISTS online_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      _id TEXT,
+      onlineOrderId TEXT,
+      customerName TEXT DEFAULT '',
+      deliveryAddress TEXT DEFAULT '',
+      paymentMethod TEXT DEFAULT 'Cash on Delivery (COD)',
+      paymentSlip TEXT DEFAULT '',
+      items TEXT,
+      totalAmount REAL,
+      status TEXT DEFAULT 'pending',
+      date TEXT
+    )`);
+
+    await run(`CREATE TABLE IF NOT EXISTS reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      _id TEXT,
+      name TEXT,
+      rating INTEGER,
+      comment TEXT,
+      date TEXT
+    )`);
+
+    // Ensure default row in settings table
+    const existingSettings = await get(`SELECT * FROM settings LIMIT 1`);
+    if (!existingSettings) {
+      await run(`INSERT INTO settings (shopName) VALUES ('Wasana Supermarket & Retail')`);
+    }
+
+    console.log('✅ SQLite Tables Initialized Successfully');
   } catch (err) {
-    console.error('CRITICAL: MongoDB connection error:', err);
+    console.error('❌ Error initializing SQLite tables:', err.message);
   }
 };
 
-// Middleware to ensure DB connection before handling API routes
-app.use('/api', async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    res.status(500).json({ error: 'Database connection failed: ' + err.message });
-  }
-});
+initDB();
 
-// --- Schemas & Models ---
+// Helper to format product output object with boolean transforms
+const formatProduct = (p) => {
+  if (!p) return null;
+  return {
+    ...p,
+    _id: p._id || String(p.id),
+    isFeatured: Boolean(p.isFeatured)
+  };
+};
 
-const productSchema = new mongoose.Schema({
-  name: String,
-  price: Number,
-  image: String,
-  size: String, // S, M, L, XL
-  color: String,
-  stock: { type: Number, default: 0 },
-  isFeatured: { type: Boolean, default: false },
-  category: String
-});
-
-const Product = mongoose.model('Product', productSchema);
-
-const saleSchema = new mongoose.Schema({
-  invoiceNumber: String,
-  customerName: { type: String, default: 'Walking Customer' },
-  customerPhone: { type: String, default: '' },
-  deliveryAddress: { type: String, default: '' },
-  source: { type: String, default: 'pos' }, // 'pos' or 'online'
-  onlineOrderId: { type: String, default: '' },
-  items: [
-    {
-      productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-      name: String,
-      quantity: Number,
-      price: Number,
-      total: Number
-    }
-  ],
-  totalAmount: Number,
-  totalProfit: Number,
-  date: { type: Date, default: Date.now }
-});
-
-const Sale = mongoose.model('Sale', saleSchema);
-
-const settingsSchema = new mongoose.Schema({
-  shopName: { type: String, default: 'Wasana Supermarket & Retail' },
-  shopLogo: { type: String, default: '' },
-  shopPhone: { type: String, default: '011 234 5678' },
-  whatsappNumber: { type: String, default: '077 123 4567' },
-  shopAddress: { type: String, default: 'No. 120, Galle Road, Colombo 03, Sri Lanka' },
-  shopEmail: { type: String, default: 'info@wasanasuper.lk' },
-  showLogoOnInvoice: { type: Boolean, default: true },
-  showPhoneOnInvoice: { type: Boolean, default: true },
-
-  enableOnlineShop: { type: Boolean, default: true },
-  showProductImages: { type: Boolean, default: true },
-  showOutOfStock: { type: Boolean, default: false },
-  showWhatsappOrderBtn: { type: Boolean, default: true },
-  themeColor: { type: String, default: '#00a86b' },
-  bannerMessage: { type: String, default: 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available' },
-
-  invoicePrefix: { type: String, default: 'QB-' },
-  currency: { type: String, default: 'Rs.' },
-  autoInvoiceNumber: { type: Boolean, default: true },
-  showAddressOnInvoice: { type: Boolean, default: true },
-
-  // Keep old fields
-  logo: { type: String, default: '' },
-  coverImage: { type: String, default: '' },
-  facebookUrl: { type: String, default: 'https://facebook.com' },
-  instagramUrl: { type: String, default: 'https://instagram.com' },
-  aboutText: { type: String, default: 'Welcome to Wasana Supermarket! We provide high quality products across Sri Lanka with fast islandwide delivery.' },
-
-  // Bank Details (for online shop bank transfer)
-  bankName: { type: String, default: 'Commercial Bank of Ceylon' },
-  accountName: { type: String, default: 'Wasana Supermarket (Pvt) Ltd' },
-  accountNumber: { type: String, default: '1000 458 921' },
-  bankBranch: { type: String, default: 'Kollupitiya Branch' },
-  bankNote: { type: String, default: 'Please upload your bank payment slip to confirm your order.' }
-});
-
-const Settings = mongoose.model('Settings', settingsSchema);
-
-const reviewSchema = new mongoose.Schema({
-  name: String,
-  rating: Number,
-  comment: String,
-  date: { type: Date, default: Date.now }
-});
-
-const Review = mongoose.model('Review', reviewSchema);
-
-// --- Online Orders (separate from POS sales) ---
-const onlineOrderSchema = new mongoose.Schema({
-  onlineOrderId: { type: String, required: true },
-  customerName: { type: String, default: '' },
-  deliveryAddress: { type: String, default: '' },
-  paymentMethod: { type: String, default: 'Cash on Delivery (COD)' },
-  paymentSlip: { type: String, default: '' }, // Cloudinary URL of uploaded slip
-  items: [
-    {
-      productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-      name: String,
-      quantity: Number,
-      price: Number,
-      total: Number
-    }
-  ],
-  totalAmount: Number,
-  status: { type: String, default: 'pending' }, // pending / confirmed / delivered
-  date: { type: Date, default: Date.now }
-});
-
-const OnlineOrder = mongoose.model('OnlineOrder', onlineOrderSchema);
+const formatSettings = (s) => {
+  if (!s) return {};
+  return {
+    ...s,
+    _id: String(s.id),
+    showLogoOnInvoice: Boolean(s.showLogoOnInvoice),
+    showPhoneOnInvoice: Boolean(s.showPhoneOnInvoice),
+    enableOnlineShop: Boolean(s.enableOnlineShop),
+    showProductImages: Boolean(s.showProductImages),
+    showOutOfStock: Boolean(s.showOutOfStock),
+    showWhatsappOrderBtn: Boolean(s.showWhatsappOrderBtn),
+    autoInvoiceNumber: Boolean(s.autoInvoiceNumber),
+    showAddressOnInvoice: Boolean(s.showAddressOnInvoice)
+  };
+};
 
 // --- File Upload Setup ---
 const uploadDir = process.env.NODE_ENV === 'production' || process.env.VERCEL 
@@ -167,18 +191,14 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
 // --- API Routes ---
 
-// 1. Auth (Simple simulation as requested)
+// 1. Auth
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   if (username === 'admin123' && password === 'admin123') {
@@ -191,8 +211,8 @@ app.post('/api/login', (req, res) => {
 // 2. Products
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
+    const products = await all(`SELECT * FROM products ORDER BY id DESC`);
+    res.json(products.map(formatProduct));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -204,25 +224,26 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
     let imageUrl = '';
     
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: 'quickbill/products'
-      });
-      imageUrl = result.secure_url;
-      fs.unlinkSync(req.file.path); // remove temp file
+      try {
+        const result = await cloudinary.uploader.upload(req.file.path, { folder: 'quickbill/products' });
+        imageUrl = result.secure_url;
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        imageUrl = `/uploads/${req.file.filename}`;
+      }
     }
     
-    const newProduct = new Product({
-      name,
-      price: parseFloat(price),
-      image: imageUrl,
-      size,
-      color,
-      stock: parseInt(stock),
-      category,
-      isFeatured: isFeatured === 'true' || isFeatured === true
-    });
-    await newProduct.save();
-    res.json(newProduct);
+    const isFeat = (isFeatured === 'true' || isFeatured === true) ? 1 : 0;
+    const result = await run(
+      `INSERT INTO products (name, price, image, size, color, stock, category, isFeatured) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, parseFloat(price) || 0, imageUrl, size || '', color || '', parseInt(stock) || 0, category || 'General', isFeat]
+    );
+
+    const insertedId = String(result.lastID);
+    await run(`UPDATE products SET _id = ? WHERE id = ?`, [insertedId, result.lastID]);
+
+    const newProd = await get(`SELECT * FROM products WHERE id = ?`, [result.lastID]);
+    res.json(formatProduct(newProd));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -231,24 +252,33 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
 app.put('/api/products/:id', upload.single('image'), async (req, res) => {
   try {
     const { name, price, size, color, stock, category, isFeatured } = req.body;
-    const updateData = {
-      name,
-      price: parseFloat(price),
-      size,
-      color,
-      stock: parseInt(stock),
-      category,
-      isFeatured: isFeatured === 'true' || isFeatured === true
-    };
+    const isFeat = (isFeatured === 'true' || isFeatured === true) ? 1 : 0;
+
+    let imageUrl = null;
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: 'quickbill/products'
-      });
-      updateData.image = result.secure_url;
-      fs.unlinkSync(req.file.path); // remove temp file
+      try {
+        const result = await cloudinary.uploader.upload(req.file.path, { folder: 'quickbill/products' });
+        imageUrl = result.secure_url;
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        imageUrl = `/uploads/${req.file.filename}`;
+      }
     }
-    const updated = await Product.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    res.json(updated);
+
+    if (imageUrl) {
+      await run(
+        `UPDATE products SET name = ?, price = ?, image = ?, size = ?, color = ?, stock = ?, category = ?, isFeatured = ? WHERE id = ? OR _id = ?`,
+        [name, parseFloat(price) || 0, imageUrl, size || '', color || '', parseInt(stock) || 0, category || 'General', isFeat, req.params.id, req.params.id]
+      );
+    } else {
+      await run(
+        `UPDATE products SET name = ?, price = ?, size = ?, color = ?, stock = ?, category = ?, isFeatured = ? WHERE id = ? OR _id = ?`,
+        [name, parseFloat(price) || 0, size || '', color || '', parseInt(stock) || 0, category || 'General', isFeat, req.params.id, req.params.id]
+      );
+    }
+
+    const updated = await get(`SELECT * FROM products WHERE id = ? OR _id = ?`, [req.params.id, req.params.id]);
+    res.json(formatProduct(updated));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -256,7 +286,7 @@ app.put('/api/products/:id', upload.single('image'), async (req, res) => {
 
 app.delete('/api/products/:id', async (req, res) => {
   try {
-    await Product.findByIdAndDelete(req.params.id);
+    await run(`DELETE FROM products WHERE id = ? OR _id = ?`, [req.params.id, req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -264,11 +294,11 @@ app.delete('/api/products/:id', async (req, res) => {
 });
 
 // 3. Billing & Sales
-// Get a single sale by ID (for re-generating invoice JPG)
 app.get('/api/sales/:id', async (req, res) => {
   try {
-    const sale = await Sale.findById(req.params.id);
+    const sale = await get(`SELECT * FROM sales WHERE id = ? OR _id = ?`, [req.params.id, req.params.id]);
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    sale.items = JSON.parse(sale.items || '[]');
     res.json(sale);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -278,36 +308,45 @@ app.get('/api/sales/:id', async (req, res) => {
 app.post('/api/sales', async (req, res) => {
   try {
     const { items, totalAmount, customerName, customerPhone, deliveryAddress, source, onlineOrderId } = req.body;
-    console.log('Incoming Sale Request:', { customerName, customerPhone, source, itemsCount: items.length });
     
-    // 1. Generate Invoice Number based on settings
-    const settings = await Settings.findOne();
-    const prefix = settings ? (settings.invoicePrefix || 'QB') : 'QB';
-    const count = await Sale.countDocuments({ source: { $ne: 'online' } });
+    const settingsRow = await get(`SELECT * FROM settings LIMIT 1`);
+    const prefix = settingsRow ? (settingsRow.invoicePrefix || 'QB-') : 'QB-';
+    
+    const countRow = await get(`SELECT COUNT(*) as cnt FROM sales WHERE source != 'online'`);
+    const count = countRow ? countRow.cnt : 0;
     const invoiceNumber = `${prefix}${String(count + 1).padStart(5, '0')}`;
     
-    const totalProfit = totalAmount * 0.3; 
+    const totalProfit = totalAmount * 0.3;
+    const dateStr = new Date().toISOString();
 
-    const newSale = new Sale({
-      invoiceNumber,
-      customerName: customerName || 'Walking Customer',
-      customerPhone: customerPhone || '',
-      deliveryAddress: deliveryAddress || '',
-      source: source || 'pos',
-      onlineOrderId: onlineOrderId || '',
-      items,
-      totalAmount,
-      totalProfit
-    });
+    const result = await run(
+      `INSERT INTO sales (invoiceNumber, customerName, customerPhone, deliveryAddress, source, onlineOrderId, items, totalAmount, totalProfit, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        invoiceNumber,
+        customerName || 'Walking Customer',
+        customerPhone || '',
+        deliveryAddress || '',
+        source || 'pos',
+        onlineOrderId || '',
+        JSON.stringify(items || []),
+        parseFloat(totalAmount) || 0,
+        totalProfit,
+        dateStr
+      ]
+    );
+
+    const insertedId = String(result.lastID);
+    await run(`UPDATE sales SET _id = ? WHERE id = ?`, [insertedId, result.lastID]);
 
     // Update stock levels
-    for (const item of items) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stock: -item.quantity }
-      });
+    for (const item of (items || [])) {
+      if (item.productId) {
+        await run(`UPDATE products SET stock = stock - ? WHERE id = ? OR _id = ?`, [item.quantity, item.productId, item.productId]);
+      }
     }
 
-    await newSale.save();
+    const newSale = await get(`SELECT * FROM sales WHERE id = ?`, [result.lastID]);
+    newSale.items = JSON.parse(newSale.items || '[]');
     res.json(newSale);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -316,15 +355,13 @@ app.post('/api/sales', async (req, res) => {
 
 app.get('/api/reports/summary', async (req, res) => {
   try {
-    const sales = await Sale.find({ source: { $ne: 'online' } });
-    const totalSales = sales.reduce((sum, s) => sum + s.totalAmount, 0);
-    const totalProfit = sales.reduce((sum, s) => sum + s.totalProfit, 0);
+    const sales = await all(`SELECT * FROM sales WHERE source != 'online'`);
+    const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const totalProfit = sales.reduce((sum, s) => sum + (s.totalProfit || 0), 0);
     
-    const products = await Product.find();
+    const products = await all(`SELECT * FROM products`);
     const lowStock = products.filter(p => p.stock < 10);
-    
-    // Mock best selling (could be aggregated properly)
-    const bestSelling = products.slice(0, 3); 
+    const bestSelling = products.slice(0, 3).map(formatProduct);
 
     res.json({
       totalSales,
@@ -339,95 +376,142 @@ app.get('/api/reports/summary', async (req, res) => {
 });
 
 app.get('/api/reports/daily', async (req, res) => {
-    try {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const sales = await Sale.find({ 
-          date: { $gte: startOfDay },
-          source: { $ne: 'online' }
-        });
-        res.json(sales);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const sales = await all(`SELECT * FROM sales WHERE source != 'online' AND date >= ?`, [startOfDay.toISOString()]);
+    res.json(sales.map(s => ({ ...s, items: JSON.parse(s.items || '[]') })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// 4. Settings & Shop Generation
+// 4. Settings
 app.get('/api/settings', async (req, res) => {
-  let settings = await Settings.findOne();
-  if (!settings) {
-    settings = new Settings();
-    await settings.save();
+  try {
+    let settings = await get(`SELECT * FROM settings LIMIT 1`);
+    if (!settings) {
+      await run(`INSERT INTO settings (shopName) VALUES ('Wasana Supermarket & Retail')`);
+      settings = await get(`SELECT * FROM settings LIMIT 1`);
+    }
+    res.json(formatSettings(settings));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  res.json(settings);
 });
 
 app.post('/api/settings', async (req, res) => {
-  let settings = await Settings.findOne();
-  if (!settings) settings = new Settings();
-  
-  Object.keys(req.body).forEach(key => {
-    // Explicitly allow bank fields and others in schema
-    if ((settingsSchema.paths[key] || key.startsWith('bank') || key.includes('Account')) && key !== '_id' && key !== '__v') {
-      settings[key] = req.body[key];
+  try {
+    let settings = await get(`SELECT * FROM settings LIMIT 1`);
+    if (!settings) {
+      await run(`INSERT INTO settings (shopName) VALUES ('Wasana Supermarket & Retail')`);
+      settings = await get(`SELECT * FROM settings LIMIT 1`);
     }
-  });
 
-  await settings.save();
-  res.json(settings);
+    const allowedKeys = [
+      'shopName', 'shopLogo', 'shopPhone', 'whatsappNumber', 'shopAddress', 'shopEmail',
+      'showLogoOnInvoice', 'showPhoneOnInvoice', 'enableOnlineShop', 'showProductImages',
+      'showOutOfStock', 'showWhatsappOrderBtn', 'themeColor', 'bannerMessage', 'invoicePrefix',
+      'currency', 'autoInvoiceNumber', 'showAddressOnInvoice', 'logo', 'coverImage',
+      'facebookUrl', 'instagramUrl', 'aboutText', 'bankName', 'accountName', 'accountNumber',
+      'bankBranch', 'bankNote'
+    ];
+
+    const updates = [];
+    const values = [];
+
+    for (const key of allowedKeys) {
+      if (req.body[key] !== undefined) {
+        updates.push(`${key} = ?`);
+        let val = req.body[key];
+        if (typeof val === 'boolean') val = val ? 1 : 0;
+        values.push(val);
+      }
+    }
+
+    if (updates.length > 0) {
+      values.push(settings.id);
+      await run(`UPDATE settings SET ${updates.join(', ')} WHERE id = ?`, values);
+    }
+
+    const updated = await get(`SELECT * FROM settings WHERE id = ?`, [settings.id]);
+    res.json(formatSettings(updated));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// System Data Endpoints
+// 5. System Management
 app.get('/api/system/backup', async (req, res) => {
   try {
-    const products = await Product.find();
-    const sales = await Sale.find();
-    const settings = await Settings.findOne();
-    res.json({ products, sales, settings });
+    const products = await all(`SELECT * FROM products`);
+    const sales = await all(`SELECT * FROM sales`);
+    const settings = await get(`SELECT * FROM settings LIMIT 1`);
+    res.json({ 
+      products: products.map(formatProduct), 
+      sales: sales.map(s => ({ ...s, items: JSON.parse(s.items || '[]') })), 
+      settings: formatSettings(settings) 
+    });
   } catch(err) {
-    res.status(500).json({error: err.message});
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/system/restore', async (req, res) => {
-    try {
-        const { products, sales, settings } = req.body;
-        if (products) {
-            await Product.deleteMany({});
-            await Product.insertMany(products);
-        }
-        if (sales) {
-            await Sale.deleteMany({});
-            await Sale.insertMany(sales);
-        }
-        if (settings) {
-            await Settings.deleteMany({});
-            const s = new Settings(settings);
-            await s.save();
-        }
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+  try {
+    const { products, sales, settings } = req.body;
+    if (products) {
+      await run(`DELETE FROM products`);
+      for (const p of products) {
+        const isFeat = p.isFeatured ? 1 : 0;
+        const resP = await run(
+          `INSERT INTO products (name, price, image, size, color, stock, category, isFeatured) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [p.name, p.price, p.image || '', p.size || '', p.color || '', p.stock || 0, p.category || '', isFeat]
+        );
+        await run(`UPDATE products SET _id = ? WHERE id = ?`, [p._id || String(resP.lastID), resP.lastID]);
+      }
     }
+    if (sales) {
+      await run(`DELETE FROM sales`);
+      for (const s of sales) {
+        const resS = await run(
+          `INSERT INTO sales (invoiceNumber, customerName, customerPhone, deliveryAddress, source, onlineOrderId, items, totalAmount, totalProfit, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [s.invoiceNumber, s.customerName, s.customerPhone, s.deliveryAddress, s.source || 'pos', s.onlineOrderId || '', JSON.stringify(s.items || []), s.totalAmount, s.totalProfit || 0, s.date]
+        );
+        await run(`UPDATE sales SET _id = ? WHERE id = ?`, [s._id || String(resS.lastID), resS.lastID]);
+      }
+    }
+    if (settings) {
+      await run(`DELETE FROM settings`);
+      await run(
+        `INSERT INTO settings (shopName, shopPhone, whatsappNumber, shopAddress, currency, themeColor, bannerMessage) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [settings.shopName, settings.shopPhone, settings.whatsappNumber, settings.shopAddress, settings.currency || 'Rs.', settings.themeColor || '#00a86b', settings.bannerMessage || '']
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete('/api/system/products', async (req, res) => {
   try {
-    await Product.deleteMany({});
-    res.json({success: true});
+    await run(`DELETE FROM products`);
+    res.json({ success: true });
   } catch(err) {
-    res.status(500).json({error: err.message});
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.delete('/api/system/reset', async (req, res) => {
   try {
-    await Product.deleteMany({});
-    await Sale.deleteMany({});
-    await Settings.deleteMany({});
-    res.json({success: true});
+    await run(`DELETE FROM products`);
+    await run(`DELETE FROM sales`);
+    await run(`DELETE FROM settings`);
+    await run(`INSERT INTO settings (shopName) VALUES ('Wasana Supermarket & Retail')`);
+    res.json({ success: true });
   } catch(err) {
-    res.status(500).json({error: err.message});
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -435,30 +519,38 @@ app.delete('/api/system/reset', async (req, res) => {
 app.post('/api/system/seed-srilanka', async (req, res) => {
   try {
     const slProducts = [
-      { name: "Dilmah Premium Ceylon Tea 100g", price: 450, stock: 50, category: "Groceries & Tea", isFeatured: true, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500" },
-      { name: "Munchee Super Cream Cracker 125g", price: 190, stock: 100, category: "Biscuits & Bakery", isFeatured: true, image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=500" },
-      { name: "Maliban Chocolate Biscuits 100g", price: 160, stock: 80, category: "Biscuits & Bakery", isFeatured: false, image: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500" },
-      { name: "Keells Chicken Sausages 500g", price: 980, stock: 40, category: "Frozen & Meat", isFeatured: true, image: "https://images.unsplash.com/photo-1528825871115-3581a5387919?w=500" },
-      { name: "MD Mixed Fruit Jam 300g", price: 520, stock: 35, category: "Groceries & Spreads", isFeatured: false, image: "https://images.unsplash.com/photo-1598153346810-860daafc16c4?w=500" },
-      { name: "Kothmale Pasteurized Fresh Milk 1L", price: 480, stock: 30, category: "Dairy & Beverages", isFeatured: true, image: "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=500" },
-      { name: "Samaposha Nutritional Cereal 200g", price: 210, stock: 75, category: "Breakfast & Health", isFeatured: true, image: "https://images.unsplash.com/photo-1517456793572-1d8efd6dc135?w=500" },
-      { name: "Anchor Full Cream Milk Powder 400g", price: 1050, stock: 45, category: "Dairy & Beverages", isFeatured: true, image: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=500" },
-      { name: "Sri Lanka Suwandel Traditional Rice 1kg", price: 340, stock: 60, category: "Rice & Grains", isFeatured: false, image: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500" }
+      { name: "Dilmah Premium Ceylon Tea 100g", price: 450, stock: 50, category: "Groceries & Tea", isFeatured: 1, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500" },
+      { name: "Munchee Super Cream Cracker 125g", price: 190, stock: 100, category: "Biscuits & Bakery", isFeatured: 1, image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=500" },
+      { name: "Maliban Chocolate Biscuits 100g", price: 160, stock: 80, category: "Biscuits & Bakery", isFeatured: 0, image: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500" },
+      { name: "Keells Chicken Sausages 500g", price: 980, stock: 40, category: "Frozen & Meat", isFeatured: 1, image: "https://images.unsplash.com/photo-1528825871115-3581a5387919?w=500" },
+      { name: "MD Mixed Fruit Jam 300g", price: 520, stock: 35, category: "Groceries & Spreads", isFeatured: 0, image: "https://images.unsplash.com/photo-1598153346810-860daafc16c4?w=500" },
+      { name: "Kothmale Pasteurized Fresh Milk 1L", price: 480, stock: 30, category: "Dairy & Beverages", isFeatured: 1, image: "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=500" },
+      { name: "Samaposha Nutritional Cereal 200g", price: 210, stock: 75, category: "Breakfast & Health", isFeatured: 1, image: "https://images.unsplash.com/photo-1517456793572-1d8efd6dc135?w=500" },
+      { name: "Anchor Full Cream Milk Powder 400g", price: 1050, stock: 45, category: "Dairy & Beverages", isFeatured: 1, image: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=500" },
+      { name: "Sri Lanka Suwandel Traditional Rice 1kg", price: 340, stock: 60, category: "Rice & Grains", isFeatured: 0, image: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500" }
     ];
 
-    await Product.deleteMany({});
-    const inserted = await Product.insertMany(slProducts);
+    await run(`DELETE FROM products`);
+    const inserted = [];
+
+    for (const p of slProducts) {
+      const resP = await run(
+        `INSERT INTO products (name, price, image, size, color, stock, category, isFeatured) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [p.name, p.price, p.image, '', '', p.stock, p.category, p.isFeatured]
+      );
+      await run(`UPDATE products SET _id = ? WHERE id = ?`, [String(resP.lastID), resP.lastID]);
+      inserted.push({ ...p, id: resP.lastID, _id: String(resP.lastID) });
+    }
     
-    // Also set default Sri Lankan settings
-    let settings = await Settings.findOne();
-    if (!settings) settings = new Settings();
-    settings.shopName = 'Wasana Supermarket & Retail';
-    settings.shopPhone = '011 234 5678';
-    settings.whatsappNumber = '077 123 4567';
-    settings.shopAddress = 'No. 120, Galle Road, Colombo 03, Sri Lanka';
-    settings.currency = 'Rs.';
-    settings.bannerMessage = 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available';
-    await settings.save();
+    await run(`UPDATE settings SET shopName = ?, shopPhone = ?, whatsappNumber = ?, shopAddress = ?, currency = ?, bannerMessage = ?, themeColor = ? WHERE id = 1`, [
+      'Wasana Supermarket & Retail',
+      '011 234 5678',
+      '077 123 4567',
+      'No. 120, Galle Road, Colombo 03, Sri Lanka',
+      'Rs.',
+      'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available',
+      '#00a86b'
+    ]);
 
     res.json({ success: true, count: inserted.length, products: inserted });
   } catch (err) {
@@ -466,66 +558,69 @@ app.post('/api/system/seed-srilanka', async (req, res) => {
   }
 });
 
-// New Upload Route for Shop Assets
+// Upload Route for Shop Assets
 app.post('/api/upload-asset', upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).send('No file uploaded.');
   try {
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: 'quickbill/assets'
-    });
-    fs.unlinkSync(req.file.path); // remove temp file
-    res.json({ url: result.secure_url });
+    let imageUrl = '';
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path, { folder: 'quickbill/assets' });
+      imageUrl = result.secure_url;
+      fs.unlinkSync(req.file.path);
+    } catch(e) {
+      imageUrl = `/uploads/${req.file.filename}`;
+    }
+    res.json({ url: imageUrl });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 5. Online Orders (separate from POS sales - no invoice)
+// 6. Online Orders
 app.post('/api/online-orders', upload.single('paymentSlip'), async (req, res) => {
   try {
     const { onlineOrderId, customerName, deliveryAddress, paymentMethod, totalAmount, items } = req.body;
-    console.log('Online Order Received:', { onlineOrderId, customerName, paymentMethod });
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
 
     let slipUrl = '';
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, { folder: 'quickbill/slips' });
-      slipUrl = result.secure_url;
-      fs.unlinkSync(req.file.path);
-    }
-
-    // Deduct stock
-    for (const item of parsedItems) {
-      if (item.productId) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
+      try {
+        const result = await cloudinary.uploader.upload(req.file.path, { folder: 'quickbill/slips' });
+        slipUrl = result.secure_url;
+        fs.unlinkSync(req.file.path);
+      } catch(e) {
+        slipUrl = `/uploads/${req.file.filename}`;
       }
     }
 
-    const order = new OnlineOrder({
-      onlineOrderId,
-      customerName,
-      deliveryAddress,
-      paymentMethod,
-      paymentSlip: slipUrl,
-      items: parsedItems,
-      totalAmount: parseFloat(totalAmount),
-      status: 'pending'
-    });
-    console.log('Final Online Order Object:', order);
-    await order.save();
-    console.log('✅ Online Order Saved to DB:', order._id);
-    res.json(order);
+    // Deduct stock
+    for (const item of (parsedItems || [])) {
+      if (item.productId) {
+        await run(`UPDATE products SET stock = stock - ? WHERE id = ? OR _id = ?`, [item.quantity, item.productId, item.productId]);
+      }
+    }
+
+    const dateStr = new Date().toISOString();
+    const result = await run(
+      `INSERT INTO online_orders (onlineOrderId, customerName, deliveryAddress, paymentMethod, paymentSlip, items, totalAmount, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [onlineOrderId, customerName, deliveryAddress, paymentMethod, slipUrl, JSON.stringify(parsedItems || []), parseFloat(totalAmount) || 0, 'pending', dateStr]
+    );
+
+    const insertedId = String(result.lastID);
+    await run(`UPDATE online_orders SET _id = ? WHERE id = ?`, [insertedId, result.lastID]);
+
+    const newOrder = await get(`SELECT * FROM online_orders WHERE id = ?`, [result.lastID]);
+    newOrder.items = JSON.parse(newOrder.items || '[]');
+    res.json(newOrder);
   } catch (err) {
-    console.error('❌ Error Saving Online Order:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get('/api/online-orders', async (req, res) => {
   try {
-    const orders = await OnlineOrder.find().sort({ date: -1 });
-    console.log('Fetching Online Orders. Count:', orders.length);
-    res.json(orders);
+    const orders = await all(`SELECT * FROM online_orders ORDER BY id DESC`);
+    res.json(orders.map(o => ({ ...o, items: JSON.parse(o.items || '[]') })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -534,18 +629,19 @@ app.get('/api/online-orders', async (req, res) => {
 app.patch('/api/online-orders/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await OnlineOrder.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    res.json(order);
+    await run(`UPDATE online_orders SET status = ? WHERE id = ? OR _id = ?`, [status, req.params.id, req.params.id]);
+    const updated = await get(`SELECT * FROM online_orders WHERE id = ? OR _id = ?`, [req.params.id, req.params.id]);
+    if (updated) updated.items = JSON.parse(updated.items || '[]');
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 6. Reviews
-
+// 7. Reviews
 app.get('/api/reviews', async (req, res) => {
   try {
-    const reviews = await Review.find().sort({ date: -1 }).limit(5);
+    const reviews = await all(`SELECT * FROM reviews ORDER BY id DESC LIMIT 5`);
     res.json(reviews);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -555,9 +651,13 @@ app.get('/api/reviews', async (req, res) => {
 app.post('/api/reviews', async (req, res) => {
   try {
     const { name, rating, comment } = req.body;
-    const newReview = new Review({ name, rating: parseInt(rating), comment });
-    await newReview.save();
-    res.json(newReview);
+    const dateStr = new Date().toISOString();
+    const result = await run(
+      `INSERT INTO reviews (name, rating, comment, date) VALUES (?, ?, ?, ?)`,
+      [name, parseInt(rating) || 5, comment, dateStr]
+    );
+    const newRev = await get(`SELECT * FROM reviews WHERE id = ?`, [result.lastID]);
+    res.json(newRev);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -565,7 +665,7 @@ app.post('/api/reviews', async (req, res) => {
 
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`🚀 QuickBill POS Server running on http://localhost:${PORT}`);
   });
 }
 
