@@ -24,12 +24,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // --- SQLite Database Setup ---
-const dbPath = path.join(__dirname, 'quickbill.sqlite');
+const dbDir = (process.env.VERCEL || process.env.NODE_ENV === 'production')
+  ? os.tmpdir() 
+  : __dirname;
+const dbPath = path.join(dbDir, 'quickbill.sqlite');
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('❌ SQLite connection error:', err.message);
   } else {
-    console.log('✅ SQLite Database Connected:', dbPath);
+    console.log('✅ SQLite Database Connected at:', dbPath);
   }
 });
 
@@ -55,105 +59,125 @@ const all = (sql, params = []) => new Promise((resolve, reject) => {
   });
 });
 
-// Initialize Database Tables
+let isDbInitialized = false;
+let initPromise = null;
+
 const initDB = async () => {
-  try {
-    await run(`CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      _id TEXT,
-      name TEXT,
-      price REAL,
-      image TEXT,
-      size TEXT,
-      color TEXT,
-      stock INTEGER DEFAULT 0,
-      isFeatured INTEGER DEFAULT 0,
-      category TEXT
-    )`);
+  if (isDbInitialized) return;
+  if (initPromise) return initPromise;
 
-    await run(`CREATE TABLE IF NOT EXISTS sales (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      _id TEXT,
-      invoiceNumber TEXT,
-      customerName TEXT DEFAULT 'Walking Customer',
-      customerPhone TEXT DEFAULT '',
-      deliveryAddress TEXT DEFAULT '',
-      source TEXT DEFAULT 'pos',
-      onlineOrderId TEXT DEFAULT '',
-      items TEXT,
-      totalAmount REAL,
-      totalProfit REAL,
-      date TEXT
-    )`);
+  initPromise = (async () => {
+    try {
+      await run(`CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        _id TEXT,
+        name TEXT,
+        price REAL,
+        image TEXT,
+        size TEXT,
+        color TEXT,
+        stock INTEGER DEFAULT 0,
+        isFeatured INTEGER DEFAULT 0,
+        category TEXT
+      )`);
 
-    await run(`CREATE TABLE IF NOT EXISTS settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      shopName TEXT DEFAULT 'Wasana Supermarket & Retail',
-      shopLogo TEXT DEFAULT '',
-      shopPhone TEXT DEFAULT '011 234 5678',
-      whatsappNumber TEXT DEFAULT '077 123 4567',
-      shopAddress TEXT DEFAULT 'No. 120, Galle Road, Colombo 03, Sri Lanka',
-      shopEmail TEXT DEFAULT 'info@wasanasuper.lk',
-      showLogoOnInvoice INTEGER DEFAULT 1,
-      showPhoneOnInvoice INTEGER DEFAULT 1,
-      enableOnlineShop INTEGER DEFAULT 1,
-      showProductImages INTEGER DEFAULT 1,
-      showOutOfStock INTEGER DEFAULT 0,
-      showWhatsappOrderBtn INTEGER DEFAULT 1,
-      themeColor TEXT DEFAULT '#00a86b',
-      bannerMessage TEXT DEFAULT 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available',
-      invoicePrefix TEXT DEFAULT 'QB-',
-      currency TEXT DEFAULT 'Rs.',
-      autoInvoiceNumber INTEGER DEFAULT 1,
-      showAddressOnInvoice INTEGER DEFAULT 1,
-      logo TEXT DEFAULT '',
-      coverImage TEXT DEFAULT '',
-      facebookUrl TEXT DEFAULT 'https://facebook.com',
-      instagramUrl TEXT DEFAULT 'https://instagram.com',
-      aboutText TEXT DEFAULT 'Welcome to Wasana Supermarket! We provide high quality products across Sri Lanka.',
-      bankName TEXT DEFAULT 'Commercial Bank of Ceylon',
-      accountName TEXT DEFAULT 'Wasana Supermarket (Pvt) Ltd',
-      accountNumber TEXT DEFAULT '1000 458 921',
-      bankBranch TEXT DEFAULT 'Kollupitiya Branch',
-      bankNote TEXT DEFAULT 'Please upload your bank payment slip to confirm your order.'
-    )`);
+      await run(`CREATE TABLE IF NOT EXISTS sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        _id TEXT,
+        invoiceNumber TEXT,
+        customerName TEXT DEFAULT 'Walking Customer',
+        customerPhone TEXT DEFAULT '',
+        deliveryAddress TEXT DEFAULT '',
+        source TEXT DEFAULT 'pos',
+        onlineOrderId TEXT DEFAULT '',
+        items TEXT,
+        totalAmount REAL,
+        totalProfit REAL,
+        date TEXT
+      )`);
 
-    await run(`CREATE TABLE IF NOT EXISTS online_orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      _id TEXT,
-      onlineOrderId TEXT,
-      customerName TEXT DEFAULT '',
-      deliveryAddress TEXT DEFAULT '',
-      paymentMethod TEXT DEFAULT 'Cash on Delivery (COD)',
-      paymentSlip TEXT DEFAULT '',
-      items TEXT,
-      totalAmount REAL,
-      status TEXT DEFAULT 'pending',
-      date TEXT
-    )`);
+      await run(`CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shopName TEXT DEFAULT 'Wasana Supermarket & Retail',
+        shopLogo TEXT DEFAULT '',
+        shopPhone TEXT DEFAULT '011 234 5678',
+        whatsappNumber TEXT DEFAULT '077 123 4567',
+        shopAddress TEXT DEFAULT 'No. 120, Galle Road, Colombo 03, Sri Lanka',
+        shopEmail TEXT DEFAULT 'info@wasanasuper.lk',
+        showLogoOnInvoice INTEGER DEFAULT 1,
+        showPhoneOnInvoice INTEGER DEFAULT 1,
+        enableOnlineShop INTEGER DEFAULT 1,
+        showProductImages INTEGER DEFAULT 1,
+        showOutOfStock INTEGER DEFAULT 0,
+        showWhatsappOrderBtn INTEGER DEFAULT 1,
+        themeColor TEXT DEFAULT '#00a86b',
+        bannerMessage TEXT DEFAULT 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available',
+        invoicePrefix TEXT DEFAULT 'QB-',
+        currency TEXT DEFAULT 'Rs.',
+        autoInvoiceNumber INTEGER DEFAULT 1,
+        showAddressOnInvoice INTEGER DEFAULT 1,
+        logo TEXT DEFAULT '',
+        coverImage TEXT DEFAULT '',
+        facebookUrl TEXT DEFAULT 'https://facebook.com',
+        instagramUrl TEXT DEFAULT 'https://instagram.com',
+        aboutText TEXT DEFAULT 'Welcome to Wasana Supermarket! We provide high quality products across Sri Lanka.',
+        bankName TEXT DEFAULT 'Commercial Bank of Ceylon',
+        accountName TEXT DEFAULT 'Wasana Supermarket (Pvt) Ltd',
+        accountNumber TEXT DEFAULT '1000 458 921',
+        bankBranch TEXT DEFAULT 'Kollupitiya Branch',
+        bankNote TEXT DEFAULT 'Please upload your bank payment slip to confirm your order.'
+      )`);
 
-    await run(`CREATE TABLE IF NOT EXISTS reviews (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      _id TEXT,
-      name TEXT,
-      rating INTEGER,
-      comment TEXT,
-      date TEXT
-    )`);
+      await run(`CREATE TABLE IF NOT EXISTS online_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        _id TEXT,
+        onlineOrderId TEXT,
+        customerName TEXT DEFAULT '',
+        deliveryAddress TEXT DEFAULT '',
+        paymentMethod TEXT DEFAULT 'Cash on Delivery (COD)',
+        paymentSlip TEXT DEFAULT '',
+        items TEXT,
+        totalAmount REAL,
+        status TEXT DEFAULT 'pending',
+        date TEXT
+      )`);
 
-    // Ensure default row in settings table
-    const existingSettings = await get(`SELECT * FROM settings LIMIT 1`);
-    if (!existingSettings) {
-      await run(`INSERT INTO settings (shopName) VALUES ('Wasana Supermarket & Retail')`);
+      await run(`CREATE TABLE IF NOT EXISTS reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        _id TEXT,
+        name TEXT,
+        rating INTEGER,
+        comment TEXT,
+        date TEXT
+      )`);
+
+      const existingSettings = await get(`SELECT * FROM settings LIMIT 1`);
+      if (!existingSettings) {
+        await run(`INSERT INTO settings (shopName) VALUES ('Wasana Supermarket & Retail')`);
+      }
+
+      isDbInitialized = true;
+      console.log('✅ SQLite Tables Initialized Successfully');
+    } catch (err) {
+      console.error('❌ Error initializing SQLite tables:', err.message);
     }
+  })();
 
-    console.log('✅ SQLite Tables Initialized Successfully');
-  } catch (err) {
-    console.error('❌ Error initializing SQLite tables:', err.message);
-  }
+  return initPromise;
 };
 
 initDB();
+
+// Middleware to ensure database is ready on Vercel Serverless Function invocations
+app.use('/api', async (req, res, next) => {
+  try {
+    await initDB();
+    next();
+  } catch (err) {
+    console.error('API Middleware DB Init Error:', err);
+    next();
+  }
+});
 
 // Helper to format product output object with boolean transforms
 const formatProduct = (p) => {
