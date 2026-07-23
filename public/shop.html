@@ -659,52 +659,65 @@
         </div>
         <div class="cart-footer">
             <div style="margin-bottom: 12px;">
-                <label
-                    style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">Full
-                    Name:</label>
-                <input type="text" id="customerName" placeholder="Enter your full name..."
-                    style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; outline: none; font-family: inherit;">
+                <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">Full Name (සම්පූර්ණ නම):</label>
+                <input type="text" id="customerName" placeholder="e.g. Kasun Perera..." style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; outline: none; font-family: inherit;">
             </div>
+            
             <div style="margin-bottom: 12px;">
-                <label
-                    style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">Delivery
-                    Address:</label>
-                <textarea id="orderAddress" rows="2" placeholder="Enter your full address..."
-                    style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; outline: none; resize: none;"></textarea>
+                <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">District & Delivery Region (දිස්ත්‍රික්කය):</label>
+                <select id="deliveryRegion" onchange="updateCartUI()" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; outline: none; font-family: inherit; background: white;">
+                    <option value="colombo" data-fee="350">Colombo / Gampaha / Kalutara (Express - Rs. 350)</option>
+                    <option value="islandwide" data-fee="450" selected>Islandwide Other Districts (Courier - Rs. 450)</option>
+                    <option value="pickup" data-fee="0">Store Pickup (Colombo 03 - FREE)</option>
+                </select>
             </div>
 
-            <div style="margin-bottom: 20px;">
-                <label
-                    style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">Payment
-                    Method:</label>
-                <div style="display: flex; gap: 8px;">
-                    <label
-                        style="flex: 1; border: 1px solid var(--border); padding: 8px; border-radius: 10px; cursor: pointer; text-align: center; font-size: 13px; font-weight: 600;">
-                        <input type="radio" name="payMethod" value="Cash on Delivery (COD)" checked onchange="toggleBankDetails()"> COD
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">Delivery Address (ලිපිනය):</label>
+                <textarea id="orderAddress" rows="2" placeholder="House No, Street Name, City..." style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; outline: none; resize: none;"></textarea>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px;">Payment Method (ගෙවීම් ක්‍රමය):</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <label style="border: 1px solid var(--border); padding: 10px; border-radius: 10px; cursor: pointer; text-align: center; font-size: 12px; font-weight: 600; background: white;">
+                        <input type="radio" name="payMethod" value="Cash on Delivery (COD)" checked onchange="toggleBankDetails()"> 💵 COD (ලැබුණු පසු)
                     </label>
-                    <label
-                        style="flex: 1; border: 1px solid var(--border); padding: 8px; border-radius: 10px; cursor: pointer; text-align: center; font-size: 13px; font-weight: 600;">
-                        <input type="radio" name="payMethod" value="Bank Transfer" onchange="toggleBankDetails()"> Bank
+                    <label style="border: 1px solid var(--border); padding: 10px; border-radius: 10px; cursor: pointer; text-align: center; font-size: 12px; font-weight: 600; background: white;">
+                        <input type="radio" name="payMethod" value="Bank Transfer" onchange="toggleBankDetails()"> 🏦 Bank Deposit
                     </label>
+                </div>
+                <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-qrcode" style="color: var(--accent-color);"></i> LankaQR / Koko / Mintpay supported via Bank Transfer
                 </div>
             </div>
 
             <div id="bankDetailsSection" style="display: none; margin-bottom: 20px; padding: 15px; background: #eff6ff; border-radius: 12px; border: 1px dashed #3b82f6;">
-                <h4 style="font-size: 14px; margin-bottom: 10px; color: #1e40af;"><i class="fas fa-university"></i> Bank Transfer Details</h4>
-                <div id="bankInfoText" style="font-size: 13px; line-height: 1.6; color: #1e3a8a; white-space: pre-line;">
-                </div>
+                <h4 style="font-size: 14px; margin-bottom: 10px; color: #1e40af;"><i class="fas fa-university"></i> Sri Lanka Bank Transfer Details</h4>
+                <div id="bankInfoText" style="font-size: 13px; line-height: 1.6; color: #1e3a8a; white-space: pre-line;"></div>
                 <div style="margin-top: 15px;">
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: #1e40af; margin-bottom: 5px;">Upload Payment Slip:</label>
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: #1e40af; margin-bottom: 5px;">Upload Payment Slip (បង្កាន់පත Upload):</label>
                     <input type="file" id="paymentSlip" accept="image/*" style="font-size: 12px; width: 100%;">
                 </div>
             </div>
 
-            <div class="cart-total-row">
-                <span>Total</span>
-                <span id="cartTotal">0</span>
+            <div style="border-top: 1px dashed var(--border); padding-top: 12px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 14px; color: var(--text-muted); margin-bottom: 6px;">
+                    <span>Subtotal</span>
+                    <span id="cartSubtotal">Rs. 0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px; color: var(--text-muted); margin-bottom: 8px;">
+                    <span>Delivery Fee</span>
+                    <span id="cartDeliveryFee">Rs. 0</span>
+                </div>
+                <div class="cart-total-row" style="margin-bottom: 0;">
+                    <span>Grand Total</span>
+                    <span id="cartTotal">Rs. 0</span>
+                </div>
             </div>
+            
             <button class="btn-checkout" onclick="checkoutWhatsApp()">
-                <i class="fab fa-whatsapp"></i> PLACE ORDER ON WHATSAPP
+                <i class="fab fa-whatsapp"></i> PLACE ORDER VIA WHATSAPP
             </button>
         </div>
     </div>
@@ -927,6 +940,8 @@
 
             if (cart.length === 0) {
                 list.innerHTML = `<p style="text-align:center; padding: 20px; color: grey;">Your cart is empty</p>`;
+                if (document.getElementById('cartSubtotal')) document.getElementById('cartSubtotal').innerText = `${currency} 0`;
+                if (document.getElementById('cartDeliveryFee')) document.getElementById('cartDeliveryFee').innerText = `${currency} 0`;
                 totalEl.innerText = `${currency} 0`;
                 return;
             }
@@ -947,8 +962,20 @@
                 </div>
             `).join('');
 
-            const total = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
-            totalEl.innerText = `${currency} ${total.toLocaleString()}`;
+            const subtotal = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
+            
+            const regionSelect = document.getElementById('deliveryRegion');
+            let deliveryFee = 450;
+            if (regionSelect) {
+                const opt = regionSelect.options[regionSelect.selectedIndex];
+                if (opt) deliveryFee = parseInt(opt.getAttribute('data-fee')) || 0;
+            }
+
+            const grandTotal = subtotal + deliveryFee;
+
+            if (document.getElementById('cartSubtotal')) document.getElementById('cartSubtotal').innerText = `${currency} ${subtotal.toLocaleString()}`;
+            if (document.getElementById('cartDeliveryFee')) document.getElementById('cartDeliveryFee').innerText = `${currency} ${deliveryFee.toLocaleString()}`;
+            totalEl.innerText = `${currency} ${grandTotal.toLocaleString()}`;
         }
 
         function updateCartQty(idx, delta) {
@@ -988,13 +1015,21 @@
             const addr = document.getElementById('orderAddress').value.trim();
             if (!addr) return alert("Please enter your delivery address!");
 
+            const regionSelect = document.getElementById('deliveryRegion');
+            const regionName = regionSelect ? regionSelect.options[regionSelect.selectedIndex].text : "Islandwide Courier";
+            const deliveryFee = regionSelect ? parseInt(regionSelect.options[regionSelect.selectedIndex].getAttribute('data-fee')) || 0 : 450;
+
             const payMethodSelect = document.querySelector('input[name="payMethod"]:checked');
             const payMethod = payMethodSelect ? payMethodSelect.value : "Not Selected";
 
-            const wa = shopSettings.whatsappNumber || shopSettings.shopPhone;
-            if (!wa) return alert("Shop contact not configured");
+            const waRaw = shopSettings.whatsappNumber || shopSettings.shopPhone || "";
+            if (!waRaw) return alert("Shop contact not configured");
+            
+            let wa = waRaw.replace(/\D/g, "");
+            if (wa.startsWith('0')) wa = '94' + wa.substring(1);
+            else if (wa.length === 9) wa = '94' + wa;
 
-            const storeName = shopSettings.shopName || 'QuickBill POS';
+            const storeName = shopSettings.shopName || 'Wasana Supermarket & Retail';
 
             // Generate order metadata
             const orderId = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
@@ -1002,28 +1037,28 @@
             const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
             const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-            let msg = `🛒 *New Order - ${storeName}*\n\n`;
+            const subtotal = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
+            const grandTotal = subtotal + deliveryFee;
+
+            let msg = `🛒 *New Online Order - ${storeName}*\n\n`;
             msg += `🧾 *Order ID:* ${orderId}\n`;
-            msg += `📅 *Date:* ${dateStr}\n`;
-            msg += `⏰ *Time:* ${timeStr}\n\n`;
+            msg += `📅 *Date:* ${dateStr} ${timeStr}\n\n`;
             msg += `👤 *Customer:* ${name}\n`;
-            msg += `📍 *Address:* ${addr}\n`;
+            msg += `📍 *Delivery Address:* ${addr}\n`;
+            msg += `🚚 *Delivery Option:* ${regionName}\n`;
             msg += `💳 *Payment Method:* ${payMethod}\n\n`;
 
-            msg += `📦 *Order Summary:*\n`;
+            msg += `📦 *Items Ordered:*\n`;
             cart.forEach(item => {
-                msg += `🔹 *${item.name}*\n   Qty: ${item.quantity} × ${currency} ${item.price.toLocaleString()}\n   Subtotal: ${currency} ${(item.price * item.quantity).toLocaleString()}\n\n`;
+                msg += `• *${item.name}* x${item.quantity} = ${currency} ${(item.price * item.quantity).toLocaleString()}\n`;
             });
-            const total = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
 
-            msg += `💰 *Total Amount: ${currency} ${total.toLocaleString()}*\n\n`;
-            msg += `----------------\n\n`;
-            msg += `⚡ *Order received via ${storeName}*\n`;
-            msg += `📲 *Your order has been successfully placed.*\n\n`;
-            msg += `----------------\n\n`;
-            msg += `💻 *Powered by QuickBill POS System*\n`;
-            msg += `👨‍💻 *Developed by GridX Dev Studio*\n`;
-            msg += `📦 *Smart Billing & Online Shop Solution*`;
+            msg += `\n------------------------------\n`;
+            msg += `💵 *Subtotal:* ${currency} ${subtotal.toLocaleString()}\n`;
+            msg += `🚚 *Delivery Fee:* ${currency} ${deliveryFee.toLocaleString()}\n`;
+            msg += `💰 *Grand Total:* *${currency} ${grandTotal.toLocaleString()}*\n`;
+            msg += `------------------------------\n\n`;
+            msg += `ස්තූතියි! නැවත පැමිණෙන්න!\nThank you for shopping with us! 🙏`;
 
             console.log("Starting Checkout. Order ID:", orderId);
             isCheckingOut = true;
@@ -1032,9 +1067,9 @@
             const formData = new FormData();
             formData.append('onlineOrderId', orderId);
             formData.append('customerName', name);
-            formData.append('deliveryAddress', addr);
+            formData.append('deliveryAddress', `${addr} [Region: ${regionName}]`);
             formData.append('paymentMethod', payMethod);
-            formData.append('totalAmount', total);
+            formData.append('totalAmount', grandTotal);
             formData.append('items', JSON.stringify(cart.map(item => ({
                 productId: item._id,
                 name: item.name,
@@ -1054,7 +1089,7 @@
                 console.log('✅ Online order saved to POS:', orderId);
                 alert('Order successfully sent to POS Dashboard!');
                 // Open WhatsApp after successful API submission
-                window.open(`https://wa.me/${wa.replace(/\s/g, "")}?text=${encodeURIComponent(msg)}`, '_blank');
+                window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
                 
                 // Clear cart & reset form
                 cart = [];
@@ -1070,7 +1105,7 @@
             })
             .catch(err => {
                 console.error('❌ Error saving online order:', err);
-                alert('An error occurred while placing your order. Please try again.');
+                alert('An error occurred while placing your order: ' + err.message);
                 isCheckingOut = false;
             });
         }

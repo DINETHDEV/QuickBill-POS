@@ -87,12 +87,12 @@ const saleSchema = new mongoose.Schema({
 const Sale = mongoose.model('Sale', saleSchema);
 
 const settingsSchema = new mongoose.Schema({
-  shopName: { type: String, default: 'Wasana Cake' },
+  shopName: { type: String, default: 'Wasana Supermarket & Retail' },
   shopLogo: { type: String, default: '' },
-  shopPhone: { type: String, default: '' },
-  whatsappNumber: { type: String, default: '' },
-  shopAddress: { type: String, default: '' },
-  shopEmail: { type: String, default: '' },
+  shopPhone: { type: String, default: '011 234 5678' },
+  whatsappNumber: { type: String, default: '077 123 4567' },
+  shopAddress: { type: String, default: 'No. 120, Galle Road, Colombo 03, Sri Lanka' },
+  shopEmail: { type: String, default: 'info@wasanasuper.lk' },
   showLogoOnInvoice: { type: Boolean, default: true },
   showPhoneOnInvoice: { type: Boolean, default: true },
 
@@ -100,8 +100,8 @@ const settingsSchema = new mongoose.Schema({
   showProductImages: { type: Boolean, default: true },
   showOutOfStock: { type: Boolean, default: false },
   showWhatsappOrderBtn: { type: Boolean, default: true },
-  themeColor: { type: String, default: '#22c55e' },
-  bannerMessage: { type: String, default: 'New Arrival – 20% OFF this week!' },
+  themeColor: { type: String, default: '#00a86b' },
+  bannerMessage: { type: String, default: 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available' },
 
   invoicePrefix: { type: String, default: 'QB-' },
   currency: { type: String, default: 'Rs.' },
@@ -111,16 +111,16 @@ const settingsSchema = new mongoose.Schema({
   // Keep old fields
   logo: { type: String, default: '' },
   coverImage: { type: String, default: '' },
-  facebookUrl: { type: String, default: '' },
-  instagramUrl: { type: String, default: '' },
-  aboutText: { type: String, default: 'Welcome to our shop! We provide the best products in Sri Lanka.' },
+  facebookUrl: { type: String, default: 'https://facebook.com' },
+  instagramUrl: { type: String, default: 'https://instagram.com' },
+  aboutText: { type: String, default: 'Welcome to Wasana Supermarket! We provide high quality products across Sri Lanka with fast islandwide delivery.' },
 
   // Bank Details (for online shop bank transfer)
-  bankName: { type: String, default: '' },
-  accountName: { type: String, default: '' },
-  accountNumber: { type: String, default: '' },
-  bankBranch: { type: String, default: '' },
-  bankNote: { type: String, default: '' }
+  bankName: { type: String, default: 'Commercial Bank of Ceylon' },
+  accountName: { type: String, default: 'Wasana Supermarket (Pvt) Ltd' },
+  accountNumber: { type: String, default: '1000 458 921' },
+  bankBranch: { type: String, default: 'Kollupitiya Branch' },
+  bankNote: { type: String, default: 'Please upload your bank payment slip to confirm your order.' }
 });
 
 const Settings = mongoose.model('Settings', settingsSchema);
@@ -428,6 +428,41 @@ app.delete('/api/system/reset', async (req, res) => {
     res.json({success: true});
   } catch(err) {
     res.status(500).json({error: err.message});
+  }
+});
+
+// Seed Sri Lanka Products Route
+app.post('/api/system/seed-srilanka', async (req, res) => {
+  try {
+    const slProducts = [
+      { name: "Dilmah Premium Ceylon Tea 100g", price: 450, stock: 50, category: "Groceries & Tea", isFeatured: true, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500" },
+      { name: "Munchee Super Cream Cracker 125g", price: 190, stock: 100, category: "Biscuits & Bakery", isFeatured: true, image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=500" },
+      { name: "Maliban Chocolate Biscuits 100g", price: 160, stock: 80, category: "Biscuits & Bakery", isFeatured: false, image: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500" },
+      { name: "Keells Chicken Sausages 500g", price: 980, stock: 40, category: "Frozen & Meat", isFeatured: true, image: "https://images.unsplash.com/photo-1528825871115-3581a5387919?w=500" },
+      { name: "MD Mixed Fruit Jam 300g", price: 520, stock: 35, category: "Groceries & Spreads", isFeatured: false, image: "https://images.unsplash.com/photo-1598153346810-860daafc16c4?w=500" },
+      { name: "Kothmale Pasteurized Fresh Milk 1L", price: 480, stock: 30, category: "Dairy & Beverages", isFeatured: true, image: "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=500" },
+      { name: "Samaposha Nutritional Cereal 200g", price: 210, stock: 75, category: "Breakfast & Health", isFeatured: true, image: "https://images.unsplash.com/photo-1517456793572-1d8efd6dc135?w=500" },
+      { name: "Anchor Full Cream Milk Powder 400g", price: 1050, stock: 45, category: "Dairy & Beverages", isFeatured: true, image: "https://images.unsplash.com/photo-1550583724-b2692b85b150?w=500" },
+      { name: "Sri Lanka Suwandel Traditional Rice 1kg", price: 340, stock: 60, category: "Rice & Grains", isFeatured: false, image: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500" }
+    ];
+
+    await Product.deleteMany({});
+    const inserted = await Product.insertMany(slProducts);
+    
+    // Also set default Sri Lankan settings
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+    settings.shopName = 'Wasana Supermarket & Retail';
+    settings.shopPhone = '011 234 5678';
+    settings.whatsappNumber = '077 123 4567';
+    settings.shopAddress = 'No. 120, Galle Road, Colombo 03, Sri Lanka';
+    settings.currency = 'Rs.';
+    settings.bannerMessage = 'දිවයින පුරා බෙදාහැරීම් (Islandwide Delivery) | Cash on Delivery Available';
+    await settings.save();
+
+    res.json({ success: true, count: inserted.length, products: inserted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

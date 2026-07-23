@@ -500,7 +500,8 @@ async function checkout() {
         document.getElementById('modalWaNumber').value = custPhone;
 
         document.getElementById('btnShareWA').onclick = () => {
-            const msg = `Hi ${custName},\n\nHere is your invoice *#${sale.invoiceNumber}* for *${s.currency}${totalAmount}*.\n\nThank you for shopping at ${s.shopName}!`;
+            const itemsList = (sale.items || []).map(i => `• ${i.name} x${i.quantity} = ${s.currency} ${i.total.toLocaleString()}`).join('\n');
+            const msg = `🛍️ *${s.shopName || 'QuickBill POS'}*\n🧾 *බිල්පත / Invoice #${sale.invoiceNumber}*\n\n*පාරිභෝගිකයා / Customer:* ${custName}\n\n*මිලදී ගත් භාණ්ඩ / Items:*\n${itemsList}\n\n------------------------------\n💰 *මුළු එකතුව / Grand Total:* *${s.currency} ${totalAmount.toLocaleString()}*\n------------------------------\n\nස්තූතියි! නැවත පැමිණෙන්න! 🙏\nThank you for shopping with us!`;
             
             let wNumber = document.getElementById('modalWaNumber').value.trim();
             let phone = wNumber.replace(/\D/g, ''); // Clean phone number
@@ -965,6 +966,10 @@ async function renderSettings() {
 
                         <hr style="border: none; border-top: 1px solid var(--border); margin: 10px 0;">
                         
+                        <button class="btn btn-outline" style="justify-content: center; color: var(--accent); border-color: var(--accent);" onclick="seedSriLankaProducts()">
+                            <i class="fas fa-flag"></i> 🇱🇰 Load Sri Lanka Demo Products
+                        </button>
+                        
                         <button class="btn btn-outline" style="justify-content: center; color: #f59e0b; border-color: #f59e0b;" onclick="clearAllProducts()">
                             <i class="fas fa-eraser"></i> Clear All Products
                         </button>
@@ -1113,6 +1118,19 @@ window.resetPosSystem = async function() {
          }
     }
 };
+
+window.seedSriLankaProducts = async function() {
+    if (!confirm("🇱🇰 ශ්‍රී ලංකා demo products load කරන්නද?\n\nThis will REPLACE all existing products with Sri Lankan sample products (Dilmah Tea, Munchee Biscuits, Keells Sausages etc) and apply Sri Lankan store settings.\n\nAre you sure?")) return;
+    try {
+        const res = await axios.post(`${API_URL}/system/seed-srilanka`);
+        alert(`✅ ${res.data.count} Sri Lankan products loaded!\n\nShop settings updated with Sri Lankan defaults.`);
+        renderSettings(); // Refresh the settings page
+        renderProducts(); // Refresh products
+    } catch(e) {
+        alert('Failed to load Sri Lanka products: ' + e.message);
+    }
+};
+
 
 window.clearShopInfo = function() {
     if (confirm('Are you sure you want to clear all shop information?')) {
