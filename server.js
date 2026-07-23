@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const sqlite3 = require('sqlite3').verbose();
+const { createClient } = require('@libsql/client');
 require('dotenv').config();
 const cloudinary = require('cloudinary').v2;
 
@@ -23,41 +23,34 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// --- SQLite Database Setup ---
-const dbDir = (process.env.VERCEL || process.env.NODE_ENV === 'production')
-  ? os.tmpdir() 
-  : __dirname;
-const dbPath = path.join(dbDir, 'quickbill.sqlite');
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('❌ SQLite connection error:', err.message);
-  } else {
-    console.log('✅ SQLite Database Connected at:', dbPath);
-  }
+// --- Turso (libSQL) Database Setup ---
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-// Promisified SQL helpers
-const run = (sql, params = []) => new Promise((resolve, reject) => {
-  db.run(sql, params, function(err) {
-    if (err) reject(err);
-    else resolve(this);
+// SQL helpers compatible with libsql/client
+const run = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  return { lastID: Number(result.lastInsertRowid), changes: result.rowsAffected };
+};
+
+const get = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  if (result.rows.length === 0) return undefined;
+  const row = {};
+  result.columns.forEach((col, i) => { row[col] = result.rows[0][i]; });
+  return row;
+};
+
+const all = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  return result.rows.map(row => {
+    const obj = {};
+    result.columns.forEach((col, i) => { obj[col] = row[i]; });
+    return obj;
   });
-});
-
-const get = (sql, params = []) => new Promise((resolve, reject) => {
-  db.get(sql, params, (err, row) => {
-    if (err) reject(err);
-    else resolve(row);
-  });
-});
-
-const all = (sql, params = []) => new Promise((resolve, reject) => {
-  db.all(sql, params, (err, rows) => {
-    if (err) reject(err);
-    else resolve(rows);
-  });
-});
+};
 
 let isDbInitialized = false;
 let initPromise = null;
