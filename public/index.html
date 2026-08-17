@@ -53,7 +53,7 @@
 
             <div class="nav-links" style="margin-top: auto;">
                 <li class="nav-item" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
-                    <a href="/shop.html" target="_blank" class="nav-link" style="color: var(--accent);">
+                    <a href="#" id="sidebarVisitShop" target="_blank" class="nav-link" style="color: var(--accent);" onclick="this.href='/shop/' + (JSON.parse(localStorage.getItem('qb_business')||'{}').slug || '')">
                         <i class="fas fa-external-link-alt"></i> <span>Visit Shop</span>
                     </a>
                 </li>
@@ -66,8 +66,11 @@
         </aside>
 
         <!-- Main Content Area -->
-        <main class="main-content" id="view-container">
-            <!-- Content will be injected here via app.js -->
+        <main class="main-content" style="display: flex; flex-direction: column;">
+            <div id="subBanner" style="display: none; padding: 12px 20px; font-size: 14px; align-items: center; justify-content: center; gap: 8px; border-bottom: 1px solid var(--border);"></div>
+            <div id="view-container" style="flex: 1; padding: 20px;">
+                <!-- Content will be injected here via app.js -->
+            </div>
         </main>
     </div>
 

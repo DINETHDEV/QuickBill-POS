@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS Super Admin — QuickBill</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #f1f5f9; }
+        .sidebar { background: #1e293b; border-right: 1px solid rgba(255,255,255,0.05); width: 260px; padding: 20px; position: fixed; height: 100vh; overflow-y: auto; }
+        .main-content { margin-left: 260px; padding: 30px; }
+        .stat-card { background: #1e293b; border: 1px solid rgba(255,255,255,0.05); }
+        .table-card { background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; margin-bottom: 30px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px; font-size: 12px; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 14px; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .badge-active { background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); }
+        .badge-suspended { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); }
+        .badge-trial { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); }
+        .nav-item { padding: 12px 16px; border-radius: 8px; cursor: pointer; color: #94a3b8; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; transition: 0.2s; }
+        .nav-item:hover, .nav-item.active { background: rgba(59,130,246,0.1); color: #3b82f6; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: #1e293b; padding: 24px; border-radius: 12px; width: 100%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); }
+        .form-group label { color: #94a3b8; font-size: 13px; margin-bottom: 6px; display: block; }
+        .form-group input, .form-group select { width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; color: white; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div style="font-size: 20px; font-weight: 800; color: white; margin-bottom: 40px; display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-shield-alt" style="color:#3b82f6;"></i> SaaS Admin
+        </div>
+        <div class="nav-item active" onclick="switchTab('dashboard', this)"><i class="fas fa-chart-pie"></i> Dashboard</div>
+        <div class="nav-item" onclick="switchTab('businesses', this)"><i class="fas fa-store"></i> Businesses</div>
+        <div class="nav-item" onclick="switchTab('packages', this)"><i class="fas fa-box"></i> Packages</div>
+        
+        <div style="margin-top: 40px;">
+            <button class="btn btn-outline" style="width: 100%; justify-content: center; border-color: #ef4444; color: #ef4444;" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        
+        <!-- DASHBOARD -->
+        <div id="tab-dashboard" class="tab-content">
+            <h2 style="margin-bottom: 24px;">Platform Overview</h2>
+            <div class="grid" id="statsGrid">
+                <!-- Stats injected here -->
+            </div>
+        </div>
+
+        <!-- BUSINESSES -->
+        <div id="tab-businesses" class="tab-content" style="display:none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2>Tenant Businesses</h2>
+                <button class="btn btn-primary" onclick="loadBusinesses()"><i class="fas fa-sync"></i> Refresh</button>
+            </div>
+            <div class="table-card">
+                <table>
+                    <thead><tr><th>ID</th><th>Business</th><th>Owner</th><th>Status</th><th>Sub Status</th><th>Created</th><th>Actions</th></tr></thead>
+                    <tbody id="businessesTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PACKAGES -->
+        <div id="tab-packages" class="tab-content" style="display:none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2>Subscription Packages</h2>
+                <button class="btn btn-primary" onclick="showPackageModal()"><i class="fas fa-plus"></i> New Package</button>
+            </div>
+            <div class="grid" id="packagesGrid"></div>
+        </div>
+
+    </main>
+
+    <!-- Package Modal -->
+    <div id="packageModal" class="modal">
+        <div class="modal-content">
+            <h3 id="pkgModalTitle" style="margin-bottom: 20px;">Add Package</h3>
+            <form id="pkgForm">
+                <input type="hidden" id="pkg_id">
+                <div class="form-group"><label>Name</label><input type="text" id="pkg_name" required></div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div class="form-group"><label>Price (LKR)</label><input type="number" id="pkg_price" required></div>
+                    <div class="form-group"><label>Duration (Days)</label><input type="number" id="pkg_duration" required></div>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="pkg_online" style="width:auto; margin:0;"> Enable Online Shop Feature
+                    </label>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center;">Save</button>
+                    <button type="button" class="btn btn-outline" style="flex:1; justify-content:center;" onclick="document.getElementById('packageModal').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Subscription Override Modal -->
+    <div id="subModal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 20px;">Grant Subscription</h3>
+            <p id="subBizName" style="color:var(--text-muted); margin-bottom:16px;"></p>
+            <form id="subForm">
+                <input type="hidden" id="sub_biz_id">
+                <div class="form-group">
+                    <label>Package</label>
+                    <select id="sub_package" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Reference / Note</label>
+                    <input type="text" id="sub_ref" placeholder="e.g. Manual Bank Transfer 2026">
+                </div>
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center; background:#22c55e; border-color:#22c55e;">Grant Access</button>
+                    <button type="button" class="btn btn-outline" style="flex:1; justify-content:center;" onclick="document.getElementById('subModal').style.display='none'">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const token = localStorage.getItem('qb_sa_token');
+        if (!token) window.location.href = '/super-admin/login.html';
+        
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        axios.interceptors.response.use(res => res, err => {
+            if (err.response?.status === 401 || err.response?.status === 403) logout();
+            return Promise.reject(err);
+        });
+
+        let allPackages = [];
+
+        function logout() {
+            localStorage.removeItem('qb_sa_token');
+            window.location.href = '/super-admin/login.html';
+        }
+
+        function switchTab(tab, el) {
+            document.querySelectorAll('.tab-content').forEach(d => d.style.display = 'none');
+            document.getElementById(`tab-${tab}`).style.display = 'block';
+            document.querySelectorAll('.sidebar .nav-item').forEach(d => d.classList.remove('active'));
+            el.classList.add('active');
+            
+            if (tab === 'dashboard') loadStats();
+            if (tab === 'businesses') loadBusinesses();
+            if (tab === 'packages') loadPackages();
+        }
+
+        async function loadStats() {
+            try {
+                const res = await axios.get('/api/super-admin/stats');
+                const s = res.data;
+                document.getElementById('statsGrid').innerHTML = `
+                    <div class="card stat-card"><h3>Total Businesses</h3><div class="value" style="font-size:32px;">${s.totalBusinesses}</div></div>
+                    <div class="card stat-card"><h3>Active Subscriptions</h3><div class="value" style="font-size:32px;color:#22c55e;">${s.activeSubscriptions}</div></div>
+                    <div class="card stat-card"><h3>Total Revenue</h3><div class="value" style="font-size:32px;color:#3b82f6;">Rs. ${(s.totalRevenue||0).toLocaleString()}</div></div>
+                `;
+            } catch (err) {
+                document.getElementById('statsGrid').innerHTML = `<div style="grid-column:1/-1;padding:20px;color:#ef4444;background:rgba(239,68,68,0.08);border-radius:10px;border:1px solid rgba(239,68,68,0.2);">
+                    <i class="fas fa-exclamation-circle"></i> Failed to load stats: ${err.response?.data?.message || err.message}
+                </div>`;
+            }
+        }
+
+        async function loadBusinesses() {
+            try {
+                const res = await axios.get('/api/super-admin/businesses');
+                const businesses = res.data.businesses || res.data || [];
+                document.getElementById('businessesTable').innerHTML = businesses.map(b => `
+                    <tr>
+                        <td>#${b.id}</td>
+                        <td>
+                            <div style="font-weight:700;">${b.businessName}</div>
+                            <div style="font-size:12px;color:var(--text-muted);">${b.slug}</div>
+                        </td>
+                        <td>
+                            <div>${b.ownerName}</div>
+                            <div style="font-size:12px;color:var(--text-muted);">${b.phone||b.email||''}</div>
+                        </td>
+                        <td><span class="badge ${b.status==='active'?'badge-active':'badge-suspended'}">${b.status}</span></td>
+                        <td><span class="badge badge-${b.subStatus==='active'?'active':b.subStatus==='trial'?'trial':'suspended'}">${b.subStatus||'None'}</span></td>
+                        <td>${new Date(b.createdAt).toLocaleDateString()}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" onclick="grantSub(${b.id}, '${b.businessName.replace(/'/g,"\\'")}')">Grant Sub</button>
+                            <button class="btn btn-outline btn-sm" style="border-color:#ef4444;color:#ef4444;" onclick="toggleStatus(${b.id}, '${b.status}')">
+                                ${b.status==='active'?'Suspend':'Activate'}
+                            </button>
+                        </td>
+                    </tr>
+                `).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8;">No businesses yet.</td></tr>';
+            } catch (err) {
+                document.getElementById('businessesTable').innerHTML = `<tr><td colspan="7" style="color:#ef4444;padding:20px;">Failed to load: ${err.response?.data?.message || err.message}</td></tr>`;
+            }
+        }
+
+        async function toggleStatus(id, current) {
+            const next = current === 'active' ? 'suspended' : 'active';
+            if (!confirm(`Mark business as ${next}?`)) return;
+            try {
+                await axios.post(`/api/super-admin/businesses/${id}/status`, { status: next });
+                loadBusinesses();
+            } catch (err) { showSAToast('Update failed: ' + (err.response?.data?.message || err.message), 'error'); }
+        }
+
+        async function loadPackages() {
+            try {
+                const res = await axios.get('/api/super-admin/packages');
+                allPackages = res.data.packages || res.data || [];
+                document.getElementById('packagesGrid').innerHTML = allPackages.map(p => `
+                    <div class="card" style="background:#1e293b;border:1px solid rgba(255,255,255,0.05);">
+                        <div style="display:flex;justify-content:space-between;">
+                            <h3 style="color:#3b82f6;">${p.name}</h3>
+                            <div style="font-weight:800;font-size:20px;">Rs. ${p.price}</div>
+                        </div>
+                        <div style="color:var(--text-muted);font-size:13px;margin:10px 0;">Duration: ${p.durationDays} Days</div>
+                        <div style="color:var(--text-muted);font-size:13px;margin:10px 0;">Online Shop: ${p.hasOnlineShop?'Yes':'No'}</div>
+                        <div style="display:flex;gap:10px;margin-top:20px;">
+                            <button class="btn btn-outline btn-sm" onclick="editPkg(${p.id})">Edit</button>
+                            <button class="btn btn-outline btn-sm" style="border-color:#ef4444;color:#ef4444;" onclick="delPkg(${p.id})">Delete</button>
+                        </div>
+                    </div>
+                `).join('') || '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#94a3b8;">No packages yet. Create one above.</div>';
+            } catch (err) { showSAToast('Failed to load packages: ' + (err.response?.data?.message || err.message), 'error'); }
+        }
+
+        function showPackageModal(pkg = null) {
+            document.getElementById('pkgModalTitle').innerText = pkg ? 'Edit Package' : 'New Package';
+            document.getElementById('pkg_id').value = pkg ? pkg.id : '';
+            document.getElementById('pkg_name').value = pkg ? pkg.name : '';
+            document.getElementById('pkg_price').value = pkg ? pkg.price : '';
+            document.getElementById('pkg_duration').value = pkg ? pkg.durationDays : '';
+            document.getElementById('pkg_online').checked = pkg ? Boolean(pkg.hasOnlineShop) : true;
+            document.getElementById('packageModal').style.display = 'flex';
+        }
+
+        function editPkg(id) { showPackageModal(allPackages.find(p => p.id === id)); }
+
+        async function delPkg(id) {
+            if (!confirm('Delete this package?')) return;
+            try { await axios.delete(`/api/super-admin/packages/${id}`); loadPackages(); } 
+            catch (err) { showSAToast('Delete failed: ' + (err.response?.data?.message || err.message), 'error'); }
+        }
+
+        document.getElementById('pkgForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('pkg_id').value;
+            const data = {
+                name: document.getElementById('pkg_name').value,
+                price: document.getElementById('pkg_price').value,
+                durationDays: document.getElementById('pkg_duration').value,
+                hasOnlineShop: document.getElementById('pkg_online').checked
+            };
+            try {
+                if (id) await axios.put(`/api/super-admin/packages/${id}`, data);
+                else await axios.post(`/api/super-admin/packages`, data);
+                document.getElementById('packageModal').style.display = 'none';
+                loadPackages();
+                showSAToast('Package saved!');
+            } catch (err) { showSAToast(err.response?.data?.message || 'Save failed', 'error'); }
+        };
+
+        function grantSub(bizId, name) {
+            if (!allPackages.length) return showSAToast('No packages exist. Create one first.', 'error');
+            document.getElementById('sub_biz_id').value = bizId;
+            document.getElementById('subBizName').innerText = `For: ${name}`;
+            document.getElementById('sub_package').innerHTML = allPackages.map(p => `<option value="${p.id}">${p.name} (Rs. ${p.price} / ${p.durationDays}d)</option>`).join('');
+            document.getElementById('sub_ref').value = '';
+            document.getElementById('subModal').style.display = 'flex';
+        }
+
+        document.getElementById('subForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const bizId = document.getElementById('sub_biz_id').value;
+            const pkgId = document.getElementById('sub_package').value;
+            const ref = document.getElementById('sub_ref').value;
+            try {
+                await axios.post(`/api/super-admin/businesses/${bizId}/subscriptions`, { packageId: pkgId, reference: ref });
+                document.getElementById('subModal').style.display = 'none';
+                loadBusinesses();
+                loadStats();
+                showSAToast('Subscription granted successfully!');
+            } catch (err) { showSAToast('Failed to grant subscription: ' + (err.response?.data?.message || err.message), 'error'); }
+        };
+
+        // ─── Toast helper for super-admin ─────────────────────────────────────
+        function showSAToast(msg, type = 'success') {
+            const existing = document.getElementById('saToast');
+            if (existing) existing.remove();
+            const colors = { success: '#22c55e', error: '#ef4444', warning: '#f59e0b' };
+            const t = document.createElement('div');
+            t.id = 'saToast';
+            t.style.cssText = `position:fixed;top:20px;right:20px;z-index:9999;background:#1e293b;border:1px solid ${colors[type]}40;border-left:4px solid ${colors[type]};color:white;padding:14px 18px;border-radius:10px;font-size:14px;font-weight:500;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,0.4);`;
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 4000);
+        }
+
+        window.onload = () => { loadStats(); loadPackages(); };
+    </script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Admin — QuickBill SaaS</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .login-container { background: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .login-box { max-width: 400px; width: 100%; background: #1e293b; padding: 40px 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .brand-logo { font-size: 24px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 8px; }
+        .brand-logo i { font-size: 28px; color: #3b82f6; }
+        .brand-tagline { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 32px; text-transform: uppercase; letter-spacing: 1px; }
+        .input-icon-wrap { position: relative; }
+        .input-icon-wrap i.prefix { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #64748b; }
+        .input-icon-wrap input { padding-left: 40px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; width: 100%; border-radius: 8px; padding-top: 12px; padding-bottom: 12px; font-size: 14px; }
+        .input-icon-wrap input:focus { border-color: #3b82f6; outline: none; }
+        .error-msg { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+        .btn-login { width: 100%; background: #3b82f6; color: white; border: none; padding: 14px; font-size: 15px; font-weight: 700; letter-spacing: 0.05em; border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; }
+        .btn-login:hover { background: #2563eb; }
+        .back-link { text-align: center; margin-top: 24px; }
+        .back-link a { color: #64748b; text-decoration: none; font-size: 13px; }
+        .back-link a:hover { color: white; }
+    </style>
+</head>
+<body class="login-container">
+    <div class="login-box fade-in">
+        <div class="brand-logo"><i class="fas fa-shield-alt"></i> SaaS Admin</div>
+        <p class="brand-tagline">System Management</p>
+
+        <div id="errorMessage" class="error-msg"></div>
+
+        <form id="loginForm">
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:600;">Admin Email</label>
+                <div class="input-icon-wrap">
+                    <i class="fas fa-envelope prefix"></i>
+                    <input type="email" id="email" placeholder="admin@quickbill.com" required autocomplete="email">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:600;">Password</label>
+                <div class="input-icon-wrap">
+                    <i class="fas fa-lock prefix"></i>
+                    <input type="password" id="password" placeholder="••••••••" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-login" id="loginBtn">
+                <i class="fas fa-sign-in-alt"></i> SECURE LOGIN
+            </button>
+        </form>
+
+        <div class="back-link">
+            <a href="/login.html"><i class="fas fa-arrow-left"></i> Back to Business POS</a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        if (localStorage.getItem('qb_sa_token')) window.location.href = '/super-admin/index.html';
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorMsg = document.getElementById('errorMessage');
+            const btn = document.getElementById('loginBtn');
+            
+            errorMsg.style.display = 'none';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+            btn.disabled = true;
+
+            try {
+                const res = await axios.post('/api/super-admin/login', {
+                    email: document.getElementById('email').value.trim(),
+                    password: document.getElementById('password').value
+                });
+
+                if (res.data.success) {
+                    localStorage.setItem('qb_sa_token', res.data.token);
+                    window.location.href = '/super-admin/index.html';
+                }
+            } catch (err) {
+                errorMsg.textContent = err.response?.data?.message || 'Login failed.';
+                errorMsg.style.display = 'block';
+                btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> SECURE LOGIN';
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

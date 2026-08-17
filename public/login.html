@@ -3,84 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuickBill POS - Login</title>
+    <title>QuickBill POS — Business Login</title>
+    <meta name="robots" content="noindex">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .login-container { background: radial-gradient(ellipse at 60% 40%, #1a2a1a 0%, #0f172a 70%); }
+        .login-box { max-width: 420px; }
+        .brand-logo { font-size: 22px; font-weight: 800; color: var(--accent); display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 8px; }
+        .brand-logo i { font-size: 28px; }
+        .brand-tagline { text-align: center; color: var(--text-muted); font-size: 13px; margin-bottom: 32px; }
+        .input-icon-wrap { position: relative; }
+        .input-icon-wrap i.prefix { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+        .input-icon-wrap input { padding-left: 40px; }
+        .toggle-pass { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); cursor: pointer; background: none; border: none; color: var(--text-muted); }
+        .error-msg { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+        .divider { text-align: center; color: var(--text-muted); font-size: 13px; margin: 20px 0; position: relative; }
+        .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--border); }
+        .divider::before { left: 0; } .divider::after { right: 0; }
+        .register-link { text-align: center; margin-top: 16px; font-size: 14px; color: var(--text-muted); }
+        .register-link a { color: var(--accent); font-weight: 600; text-decoration: none; }
+        .register-link a:hover { text-decoration: underline; }
+        .super-admin-link { text-align: center; margin-top: 24px; }
+        .super-admin-link a { font-size: 12px; color: var(--text-muted); text-decoration: none; opacity: 0.6; }
+        .super-admin-link a:hover { opacity: 1; }
+        .btn-login { width: 100%; justify-content: center; padding: 14px; font-size: 15px; font-weight: 700; letter-spacing: 0.05em; }
+        .subscription-badge { display: flex; align-items: center; gap: 8px; background: rgba(0,168,107,0.1); border: 1px solid rgba(0,168,107,0.2); padding: 10px 14px; border-radius: 8px; font-size: 13px; color: var(--accent); margin-bottom: 20px; }
+    </style>
 </head>
 <body class="login-container">
     <div class="login-box fade-in">
-        <div class="sidebar-logo" style="justify-content: center; margin-bottom: 20px;">
-            <i class="fas fa-bolt"></i> <span>QuickBill POS</span>
-        </div>
-        <h2 style="text-align: center; margin-bottom: 30px; font-weight: 500;">Welcome Back</h2>
-        
+        <div class="brand-logo"><i class="fas fa-bolt"></i> QuickBill POS</div>
+        <p class="brand-tagline">Business Management Made Simple</p>
+
+        <div id="errorMessage" class="error-msg"></div>
+
         <form id="loginForm">
             <div class="form-group">
-                <label>Username</label>
-                <div style="position: relative;">
-                    <i class="fas fa-user" style="position: absolute; left: 14px; top: 14px; color: var(--text-muted);"></i>
-                    <input type="text" id="username" placeholder="Enter username" style="padding-left: 40px;" required>
+                <label>Email Address</label>
+                <div class="input-icon-wrap">
+                    <i class="fas fa-envelope prefix"></i>
+                    <input type="email" id="email" placeholder="your@business.com" required autocomplete="email">
                 </div>
             </div>
-            
+
             <div class="form-group">
                 <label>Password</label>
-                <div style="position: relative;">
-                    <i class="fas fa-lock" style="position: absolute; left: 14px; top: 14px; color: var(--text-muted);"></i>
-                    <input type="password" id="password" placeholder="Enter password" style="padding-left: 40px; padding-right: 40px;" required>
-                    <i class="fas fa-eye" id="togglePassword" style="position: absolute; right: 14px; top: 14px; color: var(--text-muted); cursor: pointer;"></i>
+                <div class="input-icon-wrap" style="position:relative;">
+                    <i class="fas fa-lock prefix"></i>
+                    <input type="password" id="password" placeholder="Enter your password" required style="padding-left:40px; padding-right:44px;">
+                    <button type="button" class="toggle-pass" id="togglePassword">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
             </div>
 
-            <div id="errorMessage" style="color: #ef4444; font-size: 14px; margin-bottom: 15px; display: none; text-align: center;">
-                Invalid username or password.
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;">
-                LOGIN
+            <button type="submit" class="btn btn-primary btn-login" id="loginBtn">
+                <i class="fas fa-sign-in-alt"></i> LOGIN TO POS
             </button>
         </form>
-        
-        <p style="text-align: center; margin-top: 20px; font-size: 12px; color: var(--text-muted);">
-            Default: admin123 / admin123
-        </p>
+
+        <div class="divider">or</div>
+
+        <div class="register-link">
+            New business? <a href="/register.html">Start your free trial →</a>
+        </div>
+
+        <div class="super-admin-link">
+            <a href="/super-admin/login.html"><i class="fas fa-shield-alt"></i> Super Admin Access</a>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script>
-        const loginForm = document.getElementById('loginForm');
+        // Redirect if already logged in
+        const token = localStorage.getItem('qb_token');
+        if (token) window.location.href = '/index.html';
+
         const togglePassword = document.getElementById('togglePassword');
         const passwordInput = document.getElementById('password');
         const errorMessage = document.getElementById('errorMessage');
+        const loginBtn = document.getElementById('loginBtn');
 
         togglePassword.addEventListener('click', () => {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            togglePassword.classList.toggle('fa-eye-slash');
+            const isPass = passwordInput.type === 'password';
+            passwordInput.type = isPass ? 'text' : 'password';
+            togglePassword.querySelector('i').className = `fas fa-eye${isPass ? '-slash' : ''}`;
         });
 
-        loginForm.addEventListener('submit', async (e) => {
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             errorMessage.style.display = 'none';
-
-            const username = document.getElementById('username').value;
-            const password = passwordInput.value;
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            loginBtn.disabled = true;
 
             try {
-                const res = await axios.post('/api/login', { username, password });
+                const res = await axios.post('/api/auth/login', {
+                    email: document.getElementById('email').value.trim(),
+                    password: passwordInput.value
+                });
+
                 if (res.data.success) {
-                    localStorage.setItem('isLoggedIn', 'true');
+                    localStorage.setItem('qb_token', res.data.token);
+                    localStorage.setItem('qb_business', JSON.stringify(res.data.business));
+                    localStorage.setItem('qb_subscription', JSON.stringify(res.data.subscription));
                     window.location.href = '/index.html';
                 }
             } catch (err) {
+                const msg = err.response?.data?.message || 'Login failed. Please try again.';
+                errorMessage.textContent = msg;
                 errorMessage.style.display = 'block';
+                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> LOGIN TO POS';
+                loginBtn.disabled = false;
             }
         });
-
-        // Redirect if already logged in
-        if (localStorage.getItem('isLoggedIn') === 'true') {
-            window.location.href = '/index.html';
-        }
     </script>
 </body>
 </html>

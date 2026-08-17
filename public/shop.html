@@ -753,11 +753,12 @@
 
         async function init() {
             try {
+                const slug = window.__SHOP_SLUG || 'default';
                 const [sRes, pRes] = await Promise.all([
-                    axios.get(`/api/settings?v=${Date.now()}`).catch(() => ({ data: {} })),
-                    axios.get(`/api/products?v=${Date.now()}`).catch(() => ({ data: [] }))
+                    axios.get(`/api/shop/${slug}/info?v=${Date.now()}`).catch(() => ({ data: {} })),
+                    axios.get(`/api/shop/${slug}/products?v=${Date.now()}`).catch(() => ({ data: [] }))
                 ]);
-                shopSettings = sRes.data || {};
+                shopSettings = sRes.data?.shop || sRes.data || {};
                 products = pRes.data || [];
                 currency = shopSettings.currency || 'Rs.';
 
@@ -1083,8 +1084,9 @@
                 formData.append('paymentSlip', slipFile);
             }
 
+            const slug = window.__SHOP_SLUG || 'default';
             // Save order to POS Online Orders collection
-            axios.post('/api/online-orders', formData)
+            axios.post(`/api/shop/${slug}/orders`, formData)
             .then(() => {
                 console.log('✅ Online order saved to POS:', orderId);
                 alert('Order successfully sent to POS Dashboard!');
