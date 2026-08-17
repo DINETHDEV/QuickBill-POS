@@ -143,17 +143,26 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ─── Start Server (dev only) ───────────────────────────────────────────────────
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  app.listen(PORT, async () => {
+// ─── Start Server ────────────────────────────────────────────────────────────
+// Always listen when running as a long-lived process (Railway, local dev, etc.)
+// Only skip the listen() call on Vercel (serverless — Vercel invokes the exported app directly)
+if (!process.env.VERCEL) {
+  const startServer = async () => {
     try {
+      console.log(`QuickBill POS server starting on port ${PORT}...`);
       await initDb();
-      console.log(`🚀 QuickBill SaaS running at http://localhost:${PORT}`);
-      console.log(`📊 Super Admin: http://localhost:${PORT}/super-admin/login.html`);
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 QuickBill POS running on port ${PORT}`);
+        console.log(`🌐 http://0.0.0.0:${PORT}`);
+        console.log(`📊 Super Admin: http://0.0.0.0:${PORT}/super-admin/login.html`);
+        console.log(`✅ Database initialized`);
+      });
     } catch (err) {
-      console.error('Startup error:', err.message);
+      console.error('❌ Startup error:', err.message);
+      // Don't exit — let the process stay alive so Railway shows the real error in logs
     }
-  });
+  };
+  startServer();
 }
 
 module.exports = app;
