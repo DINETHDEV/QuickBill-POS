@@ -137,11 +137,13 @@ const initDb = async () => {
       await safeAlter(`ALTER TABLE sales ADD COLUMN paymentReceivedAt TEXT DEFAULT ''`);
       await safeAlter(`ALTER TABLE sales ADD COLUMN paymentReceivedBy TEXT DEFAULT ''`);
       await safeAlter(`ALTER TABLE sales ADD COLUMN deliveryFee REAL DEFAULT 0`);
+      await safeAlter(`ALTER TABLE sales ADD COLUMN delivery_cost REAL DEFAULT 0`);
       await safeAlter(`ALTER TABLE sales ADD COLUMN customerNotes TEXT DEFAULT ''`);
 
       await safeAlter(`ALTER TABLE online_orders ADD COLUMN paymentStatus TEXT DEFAULT 'UNPAID'`);
       await safeAlter(`ALTER TABLE online_orders ADD COLUMN orderStatus TEXT DEFAULT 'PENDING'`);
       await safeAlter(`ALTER TABLE online_orders ADD COLUMN deliveryFee REAL DEFAULT 0`);
+      await safeAlter(`ALTER TABLE online_orders ADD COLUMN delivery_cost REAL DEFAULT 0`);
       await safeAlter(`ALTER TABLE online_orders ADD COLUMN customerNotes TEXT DEFAULT ''`);
       await safeAlter(`ALTER TABLE online_orders ADD COLUMN deliveryCity TEXT DEFAULT ''`);
       await safeAlter(`ALTER TABLE online_orders ADD COLUMN orderNumber TEXT DEFAULT ''`);
@@ -155,6 +157,43 @@ const initDb = async () => {
       await safeAlter(`ALTER TABLE settings ADD COLUMN defaultDeliveryFee REAL DEFAULT 0`);
       await safeAlter(`ALTER TABLE settings ADD COLUMN invoiceAccentColor TEXT DEFAULT '#22c55e'`);
       await safeAlter(`ALTER TABLE settings ADD COLUMN shopWebsite TEXT DEFAULT ''`);
+
+      // ─── Shop styling & customization upgrades ───────────────────────
+      await safeAlter(`ALTER TABLE settings ADD COLUMN shopStyle TEXT DEFAULT 'General'`);
+      await safeAlter(`ALTER TABLE settings ADD COLUMN primaryColor TEXT DEFAULT '#00a86b'`);
+      await safeAlter(`ALTER TABLE settings ADD COLUMN secondaryColor TEXT DEFAULT '#059669'`);
+      await safeAlter(`ALTER TABLE settings ADD COLUMN buttonStyle TEXT DEFAULT 'rounded'`);
+      await safeAlter(`ALTER TABLE settings ADD COLUMN productCardStyle TEXT DEFAULT 'grid'`);
+      await safeAlter(`ALTER TABLE settings ADD COLUMN fontTheme TEXT DEFAULT 'Outfit'`);
+
+      // ─── Advanced Product attributes & variants upgrades ─────────────
+      await safeAlter(`ALTER TABLE products ADD COLUMN productType TEXT DEFAULT 'General'`);
+      await safeAlter(`ALTER TABLE products ADD COLUMN attributes TEXT DEFAULT '{}'`);
+      await safeAlter(`ALTER TABLE products ADD COLUMN hasVariants INTEGER DEFAULT 0`);
+
+      // Ensure product_variants table exists
+      await run(`CREATE TABLE IF NOT EXISTS product_variants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        _id TEXT,
+        productId TEXT NOT NULL,
+        businessId INTEGER DEFAULT 0,
+        sku TEXT,
+        barcode TEXT,
+        price REAL,
+        stock INTEGER DEFAULT 0,
+        image TEXT,
+        attributes TEXT
+      )`);
+
+      // ─── Migration: normalize payment_status to PAID / UNPAID ──────────────────
+      // Existing rows may carry legacy values (COD, PENDING, PARTIALLY_PAID, etc.).
+      // COD means "not yet paid" → store as UNPAID; the UI renders it as UNPAID (COD).
+      // Existing PAID invoices continue working unchanged.
+      await run(`UPDATE sales SET paymentStatus = 'UNPAID' WHERE paymentStatus IN ('COD','PENDING')`);
+      await run(`UPDATE sales SET paymentStatus = 'PAID' WHERE paymentStatus IS NULL OR paymentStatus = '' OR paymentStatus NOT IN ('PAID','UNPAID')`);
+      await run(`UPDATE online_orders SET paymentStatus = 'UNPAID' WHERE paymentStatus IN ('COD','PENDING')`);
+      await run(`UPDATE online_orders SET paymentStatus = 'PAID' WHERE paymentStatus = 'PAID'`);
+      await run(`UPDATE online_orders SET paymentStatus = 'UNPAID' WHERE paymentStatus IS NULL OR paymentStatus = '' OR paymentStatus NOT IN ('PAID','UNPAID','CANCELLED','REFUNDED')`);
 
       // ─── Ensure products/sales tables exist (original schema) ────────
       await run(`CREATE TABLE IF NOT EXISTS products (

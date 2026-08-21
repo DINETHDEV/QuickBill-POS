@@ -84,13 +84,33 @@ router.get('/:slug/products', async (req, res) => {
     const settings = await get(`SELECT showOutOfStock FROM settings WHERE businessId=? LIMIT 1`, [biz.id]);
     const showOutOfStock = settings ? Boolean(settings.showOutOfStock) : false;
 
-    let sql = `SELECT id,_id,name,price,image,size,color,stock,isFeatured,category FROM products WHERE businessId=?`;
+    let sql = `SELECT * FROM products WHERE businessId=?`;
     const params = [biz.id];
     if (!showOutOfStock) { sql += ` AND stock > 0`; }
     sql += ` ORDER BY isFeatured DESC, id DESC`;
 
     const products = await all(sql, params);
-    res.json(products.map(p => ({ ...p, _id: p._id || String(p.id), isFeatured: Boolean(p.isFeatured) })));
+    const result = [];
+    for (const p of products) {
+      let variants = [];
+      if (p.hasVariants) {
+        variants = await all(`SELECT * FROM product_variants WHERE productId = ? AND businessId = ?`, [p._id || String(p.id), biz.id]);
+      }
+      result.push({
+        ...p,
+        _id: p._id || String(p.id),
+        isFeatured: Boolean(p.isFeatured),
+        hasVariants: Boolean(p.hasVariants),
+        productType: p.productType || 'General',
+        attributes: JSON.parse(p.attributes || '{}'),
+        variants: variants.map(v => ({
+          ...v,
+          _id: v._id || String(v.id),
+          attributes: JSON.parse(v.attributes || '{}')
+        }))
+      });
+    }
+    res.json(result);
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
@@ -102,7 +122,7 @@ router.post('/:slug/orders', upload.single('paymentSlip'), async (req, res) => {
 
     const settings = await get(`SELECT * FROM settings WHERE businessId=? LIMIT 1`, [biz.id]);
 
-    const { customerName, customerPhone, deliveryAddress, deliveryCity, customerNotes, paymentMethod, items } = req.body;
+    const { customerName, customerPhone, deliveryAddress, deliveryCity, customerNotes, paymentMethod, paymentStatus, items, delivery_cost } = req.body;
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : (items || []);
 
     // Validation
@@ -129,17 +149,45 @@ router.post('/:slug/orders', upload.single('paymentSlip'), async (req, res) => {
     for (const item of parsedItems) {
       if (!item.quantity || item.quantity < 1) continue;
       if (item.productId) {
-        const product = await get(`SELECT price, stock, name FROM products WHERE (id=? OR _id=?) AND businessId=?`,
+        const product = await get(`SELECT price, stock, name, hasVariants FROM products WHERE (id=? OR _id=?) AND businessId=?`,
           [item.productId, item.productId, biz.id]);
         if (product) {
-          if (product.stock <= 0) {
-            return res.status(400).json({ success: false, message: `Product "${product.name}" is out of stock` });
+          let price = product.price;
+          let displayName = product.name || item.name;
+
+          if (item.variantId) {
+            const variant = await get(`SELECT price, stock FROM product_variants WHERE (id=? OR _id=?) AND productId=? AND businessId=?`,
+              [item.variantId, item.variantId, item.productId, biz.id]);
+            if (variant) {
+              if (variant.stock <= 0) {
+                return res.status(400).json({ success: false, message: `Option for product "${product.name}" is out of stock` });
+              }
+              price = variant.price !== null && variant.price !== undefined ? variant.price : product.price;
+              // Deduct stock from variant
+              await run(`UPDATE product_variants SET stock = MAX(0, stock - ?) WHERE (id=? OR _id=?) AND productId=? AND businessId=?`,
+                [item.quantity, item.variantId, item.variantId, item.productId, biz.id]);
+            } else {
+              return res.status(400).json({ success: false, message: `Product option not found` });
+            }
+          } else {
+            if (product.stock <= 0) {
+              return res.status(400).json({ success: false, message: `Product "${product.name}" is out of stock` });
+            }
+            // Deduct stock from product
+            await run(`UPDATE products SET stock = MAX(0, stock - ?) WHERE (id=? OR _id=?) AND businessId=?`,
+              [item.quantity, item.productId, item.productId, biz.id]);
           }
-          secureSubtotal += product.price * item.quantity;
-          validatedItems.push({ productId: item.productId, name: product.name || item.name, price: product.price, quantity: item.quantity, total: product.price * item.quantity });
-          // Deduct stock
-          await run(`UPDATE products SET stock = MAX(0, stock - ?) WHERE (id=? OR _id=?) AND businessId=?`,
-            [item.quantity, item.productId, item.productId, biz.id]);
+
+          secureSubtotal += price * item.quantity;
+          validatedItems.push({
+            productId: item.productId,
+            variantId: item.variantId || '',
+            variantLabel: item.variantLabel || '',
+            name: displayName,
+            price: price,
+            quantity: item.quantity,
+            total: price * item.quantity
+          });
         } else {
           return res.status(400).json({ success: false, message: `Product not found` });
         }
@@ -153,13 +201,22 @@ router.post('/:slug/orders', upload.single('paymentSlip'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'No valid items in order' });
     }
 
-    // Use server-side delivery fee from settings, or fallback to 0
-    const delFee = parseFloat(settings?.defaultDeliveryFee || 0);
+    // Use explicit delivery_cost if provided (admin override), otherwise use settings default
+    const delFee = (delivery_cost !== undefined && delivery_cost !== null && delivery_cost !== '')
+      ? Math.max(0, parseFloat(delivery_cost) || 0)
+      : parseFloat(settings?.defaultDeliveryFee || 0);
     const secureTotal = secureSubtotal + delFee;
 
     const pm = paymentMethod || 'Cash on Delivery (COD)';
     const isCOD = pm.toUpperCase().includes('COD') || pm.toUpperCase().includes('CASH ON DELIVERY');
-    const paymentStatus = isCOD ? 'COD' : 'PAID';
+    // Allow the online store to explicitly declare the payment status.
+    // COD orders default to COD; paid-up-front orders are PAID.
+    const paymentStatusRaw = String(paymentStatus || '').toUpperCase();
+    
+    let resolvedPaymentStatus = 'PAID';
+    if (paymentStatusRaw === 'PAID') resolvedPaymentStatus = 'PAID';
+    else if (paymentStatusRaw === 'UNPAID' || paymentStatusRaw === 'COD') resolvedPaymentStatus = 'COD';
+    else resolvedPaymentStatus = isCOD ? 'COD' : 'PAID';
     const orderStatus = 'PENDING';
 
     // Generate human-readable order number
@@ -168,10 +225,10 @@ router.post('/:slug/orders', upload.single('paymentSlip'), async (req, res) => {
 
     const dateStr = new Date().toISOString();
     const result = await run(
-      `INSERT INTO online_orders (orderNumber,customerName,customerPhone,deliveryAddress,deliveryCity,customerNotes,paymentMethod,paymentStatus,orderStatus,paymentSlip,items,totalAmount,deliveryFee,status,date,businessId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO online_orders (orderNumber,customerName,customerPhone,deliveryAddress,deliveryCity,customerNotes,paymentMethod,paymentStatus,orderStatus,paymentSlip,items,totalAmount,deliveryFee,delivery_cost,status,date,businessId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [orderNumber, customerName.trim(), customerPhone.trim(), deliveryAddress.trim(),
-       deliveryCity || '', customerNotes || '', pm, paymentStatus, orderStatus,
-       slipUrl, JSON.stringify(validatedItems), secureTotal, delFee, 'pending', dateStr, biz.id]
+       deliveryCity || '', customerNotes || '', pm, resolvedPaymentStatus, orderStatus,
+       slipUrl, JSON.stringify(validatedItems), secureTotal, delFee, delFee, 'pending', dateStr, biz.id]
     );
     await run(`UPDATE online_orders SET _id=? WHERE id=?`, [String(result.lastID), result.lastID]);
 
@@ -182,7 +239,7 @@ router.post('/:slug/orders', upload.single('paymentSlip'), async (req, res) => {
       success: true,
       order: newOrder,
       orderNumber: orderNumber,
-      paymentStatus: paymentStatus,
+      paymentStatus: resolvedPaymentStatus,
       orderStatus: orderStatus,
       totalAmount: secureTotal,
       currency: biz.currency || settings?.currency || 'Rs.',
@@ -243,6 +300,7 @@ router.get('/:slug/orders/:orderNumber', async (req, res) => {
         orderStatus:   order.orderStatus,
         totalAmount:   order.totalAmount,
         deliveryFee:   order.deliveryFee,
+        delivery_cost: order.delivery_cost || order.deliveryFee || 0,
         date:          order.date,
         items:         JSON.parse(order.items || '[]').map(i => ({
           name: i.name, quantity: i.quantity, price: i.price, total: i.total

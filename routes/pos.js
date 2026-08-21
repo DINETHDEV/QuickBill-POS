@@ -59,15 +59,22 @@ const formatSettings = (s) => {
 };
 
 // ─── Payment / Order Status Enums ────────────────────────────────────────────
-const PAYMENT_STATUS = { PAID: 'PAID', COD: 'COD', PENDING: 'PENDING', PARTIALLY_PAID: 'PARTIALLY_PAID', CANCELLED: 'CANCELLED', REFUNDED: 'REFUNDED', UNPAID: 'UNPAID' };
+// Only two payment statuses exist in the system:
+//   PAID   — customer has already paid
+//   UNPAID — Cash on Delivery, customer has not paid yet (displayed as "UNPAID (COD)")
+const PAYMENT_STATUS = { PAID: 'PAID', UNPAID: 'COD' };
 const ORDER_STATUS   = { PENDING: 'PENDING', CONFIRMED: 'CONFIRMED', PROCESSING: 'PROCESSING', READY: 'READY', SHIPPED: 'SHIPPED', DELIVERED: 'DELIVERED', CANCELLED: 'CANCELLED' };
 
-// Map payment method → payment status for POS
-const posPaymentStatus = (pm) => {
-  if (!pm) return PAYMENT_STATUS.PAID;
+// Map payment method → payment status for POS.
+// COD means the customer pays on delivery → status is COD until confirmed.
+const posPaymentStatus = (pm, explicit) => {
+  // Allow an explicit status override (billing screen selector).
+  if (explicit === 'PAID') return 'PAID';
+  if (explicit === 'UNPAID' || explicit === 'COD') return 'COD';
+  if (!pm) return 'PAID';
   const upper = pm.toUpperCase();
-  if (upper.includes('COD')) return PAYMENT_STATUS.COD;
-  return PAYMENT_STATUS.PAID;
+  if (upper.includes('COD') || upper.includes('CASH ON DELIVERY')) return 'COD';
+  return 'PAID';
 };
 
 // ─── Sequential number generator ─────────────────────────────────────────────
@@ -100,13 +107,31 @@ router.use(authenticate, checkSubscription);
 router.get('/products', async (req, res) => {
   try {
     const products = await all(`SELECT * FROM products WHERE businessId = ? ORDER BY id DESC`, [req.businessId]);
-    res.json(products.map(formatProduct));
+    const result = [];
+    for (const p of products) {
+      let variants = [];
+      if (p.hasVariants) {
+        variants = await all(`SELECT * FROM product_variants WHERE productId = ? AND businessId = ?`, [p._id || String(p.id), req.businessId]);
+      }
+      result.push({
+        ...formatProduct(p),
+        productType: p.productType || 'General',
+        hasVariants: Boolean(p.hasVariants),
+        attributes: JSON.parse(p.attributes || '{}'),
+        variants: variants.map(v => ({
+          ...v,
+          _id: v._id || String(v.id),
+          attributes: JSON.parse(v.attributes || '{}')
+        }))
+      });
+    }
+    res.json(result);
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 router.post('/products', upload.single('image'), async (req, res) => {
   try {
-    const { name, price, size, color, stock, category, isFeatured, costPrice } = req.body;
+    const { name, price, size, color, stock, category, isFeatured, costPrice, productType, attributes, hasVariants, variants } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Product name is required' });
     if (isNaN(price) || parseFloat(price) < 0) return res.status(400).json({ success: false, message: 'Price must be a non-negative number' });
     if (isNaN(stock) || parseInt(stock) < 0) return res.status(400).json({ success: false, message: 'Stock must be a non-negative number' });
@@ -115,23 +140,53 @@ router.post('/products', upload.single('image'), async (req, res) => {
     if (req.file) imageUrl = await uploadToCloudinary(req.file.path, 'products');
 
     const isFeat = (isFeatured === 'true' || isFeatured === true) ? 1 : 0;
+    const hasVar = (hasVariants === 'true' || hasVariants === true || parseInt(hasVariants) === 1) ? 1 : 0;
+
     const result = await run(
-      `INSERT INTO products (name,price,image,size,color,stock,category,isFeatured,businessId,costPrice) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO products (name,price,image,size,color,stock,category,isFeatured,businessId,costPrice,productType,attributes,hasVariants) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name, parseFloat(price) || 0, imageUrl, size || '', color || '', parseInt(stock) || 0,
-       category || 'General', isFeat, req.businessId, parseFloat(costPrice) || 0]
+       category || 'General', isFeat, req.businessId, parseFloat(costPrice) || 0, productType || 'General', attributes || '{}', hasVar]
     );
-    await run(`UPDATE products SET _id = ? WHERE id = ?`, [String(result.lastID), result.lastID]);
+    const productId = String(result.lastID);
+    await run(`UPDATE products SET _id = ? WHERE id = ?`, [productId, result.lastID]);
+
+    if (hasVar) {
+      const parsedVariants = JSON.parse(variants || '[]');
+      for (const v of parsedVariants) {
+        const vResult = await run(
+          `INSERT INTO product_variants (productId, businessId, sku, barcode, price, stock, attributes, image) VALUES (?,?,?,?,?,?,?,?)`,
+          [productId, req.businessId, v.sku || '', v.barcode || '', parseFloat(v.price) || 0, parseInt(v.stock) || 0, JSON.stringify(v.attributes || {}), v.image || '']
+        );
+        await run(`UPDATE product_variants SET _id = ? WHERE id = ?`, [String(vResult.lastID), vResult.lastID]);
+      }
+    }
+
     const newProd = await get(`SELECT * FROM products WHERE id = ?`, [result.lastID]);
-    res.json(formatProduct(newProd));
+    let savedVariants = [];
+    if (newProd.hasVariants) {
+      savedVariants = await all(`SELECT * FROM product_variants WHERE productId = ? AND businessId = ?`, [productId, req.businessId]);
+    }
+    res.json({
+      ...formatProduct(newProd),
+      productType: newProd.productType,
+      hasVariants: Boolean(newProd.hasVariants),
+      attributes: JSON.parse(newProd.attributes || '{}'),
+      variants: savedVariants.map(v => ({
+        ...v,
+        _id: v._id || String(v.id),
+        attributes: JSON.parse(v.attributes || '{}')
+      }))
+    });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 router.put('/products/:id', upload.single('image'), async (req, res) => {
   try {
-    const { name, price, size, color, stock, category, isFeatured, costPrice } = req.body;
+    const { name, price, size, color, stock, category, isFeatured, costPrice, productType, attributes, hasVariants, variants } = req.body;
     const isFeat = (isFeatured === 'true' || isFeatured === true) ? 1 : 0;
+    const hasVar = (hasVariants === 'true' || hasVariants === true || parseInt(hasVariants) === 1) ? 1 : 0;
 
-    const existing = await get(`SELECT id FROM products WHERE (id = ? OR _id = ?) AND businessId = ?`, [req.params.id, req.params.id, req.businessId]);
+    const existing = await get(`SELECT id, _id FROM products WHERE (id = ? OR _id = ?) AND businessId = ?`, [req.params.id, req.params.id, req.businessId]);
     if (!existing) return res.status(404).json({ success: false, message: 'Product not found' });
 
     let imageUrl = null;
@@ -139,25 +194,59 @@ router.put('/products/:id', upload.single('image'), async (req, res) => {
 
     if (imageUrl) {
       await run(
-        `UPDATE products SET name=?,price=?,image=?,size=?,color=?,stock=?,category=?,isFeatured=?,costPrice=? WHERE id=? AND businessId=?`,
+        `UPDATE products SET name=?,price=?,image=?,size=?,color=?,stock=?,category=?,isFeatured=?,costPrice=?,productType=?,attributes=?,hasVariants=? WHERE id=? AND businessId=?`,
         [name, parseFloat(price) || 0, imageUrl, size || '', color || '', parseInt(stock) || 0,
-         category || 'General', isFeat, parseFloat(costPrice) || 0, existing.id, req.businessId]
+         category || 'General', isFeat, parseFloat(costPrice) || 0, productType || 'General', attributes || '{}', hasVar, existing.id, req.businessId]
       );
     } else {
       await run(
-        `UPDATE products SET name=?,price=?,size=?,color=?,stock=?,category=?,isFeatured=?,costPrice=? WHERE id=? AND businessId=?`,
+        `UPDATE products SET name=?,price=?,size=?,color=?,stock=?,category=?,isFeatured=?,costPrice=?,productType=?,attributes=?,hasVariants=? WHERE id=? AND businessId=?`,
         [name, parseFloat(price) || 0, size || '', color || '', parseInt(stock) || 0,
-         category || 'General', isFeat, parseFloat(costPrice) || 0, existing.id, req.businessId]
+         category || 'General', isFeat, parseFloat(costPrice) || 0, productType || 'General', attributes || '{}', hasVar, existing.id, req.businessId]
       );
     }
+
+    const productId = existing._id || String(existing.id);
+    await run(`DELETE FROM product_variants WHERE productId = ? AND businessId = ?`, [productId, req.businessId]);
+    
+    if (hasVar) {
+      const parsedVariants = JSON.parse(variants || '[]');
+      for (const v of parsedVariants) {
+        const vResult = await run(
+          `INSERT INTO product_variants (productId, businessId, sku, barcode, price, stock, attributes, image) VALUES (?,?,?,?,?,?,?,?)`,
+          [productId, req.businessId, v.sku || '', v.barcode || '', parseFloat(v.price) || 0, parseInt(v.stock) || 0, JSON.stringify(v.attributes || {}), v.image || '']
+        );
+        await run(`UPDATE product_variants SET _id = ? WHERE id = ?`, [String(vResult.lastID), vResult.lastID]);
+      }
+    }
+
     const updated = await get(`SELECT * FROM products WHERE id = ?`, [existing.id]);
-    res.json(formatProduct(updated));
+    let savedVariants = [];
+    if (updated.hasVariants) {
+      savedVariants = await all(`SELECT * FROM product_variants WHERE productId = ? AND businessId = ?`, [productId, req.businessId]);
+    }
+    res.json({
+      ...formatProduct(updated),
+      productType: updated.productType,
+      hasVariants: Boolean(updated.hasVariants),
+      attributes: JSON.parse(updated.attributes || '{}'),
+      variants: savedVariants.map(v => ({
+        ...v,
+        _id: v._id || String(v.id),
+        attributes: JSON.parse(v.attributes || '{}')
+      }))
+    });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 router.delete('/products/:id', async (req, res) => {
   try {
-    await run(`DELETE FROM products WHERE (id = ? OR _id = ?) AND businessId = ?`, [req.params.id, req.params.id, req.businessId]);
+    const existing = await get(`SELECT id, _id FROM products WHERE (id = ? OR _id = ?) AND businessId = ?`, [req.params.id, req.params.id, req.businessId]);
+    if (existing) {
+      const productId = existing._id || String(existing.id);
+      await run(`DELETE FROM products WHERE id=? AND businessId=?`, [existing.id, req.businessId]);
+      await run(`DELETE FROM product_variants WHERE productId=? AND businessId=?`, [productId, req.businessId]);
+    }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -175,7 +264,7 @@ router.get('/sales/:id', async (req, res) => {
 router.post('/sales', async (req, res) => {
   try {
     const { items, customerName, customerPhone, deliveryAddress, source, onlineOrderId,
-            discount, paymentMethod, deliveryFee, customerNotes } = req.body;
+            discount, paymentMethod, deliveryFee, delivery_cost, customerNotes, paymentStatus } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart cannot be empty' });
@@ -198,9 +287,29 @@ router.post('/sales', async (req, res) => {
         const product = await get(`SELECT costPrice, price, name, stock FROM products WHERE (id = ? OR _id = ?) AND businessId = ?`,
           [item.productId, item.productId, req.businessId]);
         if (product) {
-          secureSubtotal += product.price * item.quantity;
-          if (product.costPrice > 0) totalProfit += (product.price - product.costPrice) * item.quantity;
-          validatedItems.push({ productId: item.productId, name: product.name || item.name, price: product.price, quantity: item.quantity, total: product.price * item.quantity });
+          let price = product.price;
+          let costPrice = product.costPrice;
+          let displayName = product.name || item.name;
+
+          if (item.variantId) {
+            const variant = await get(`SELECT price, sku FROM product_variants WHERE (id = ? OR _id = ?) AND productId = ? AND businessId = ?`,
+              [item.variantId, item.variantId, item.productId, req.businessId]);
+            if (variant) {
+              price = variant.price !== null && variant.price !== undefined ? variant.price : product.price;
+            }
+          }
+
+          secureSubtotal += price * item.quantity;
+          if (costPrice > 0) totalProfit += (price - costPrice) * item.quantity;
+          validatedItems.push({
+            productId: item.productId,
+            variantId: item.variantId || '',
+            variantLabel: item.variantLabel || '',
+            name: displayName,
+            price: price,
+            quantity: item.quantity,
+            total: price * item.quantity
+          });
         } else {
           // Non-product line item (e.g. delivery)
           secureSubtotal += (item.price || 0) * item.quantity;
@@ -213,21 +322,21 @@ router.post('/sales', async (req, res) => {
     }
 
     const discountAmt = parseFloat(discount) || 0;
-    const delFee = parseFloat(deliveryFee) || 0;
+    const delFee = parseFloat(delivery_cost ?? deliveryFee) || 0;
     const taxRate = settingsRow ? (parseFloat(settingsRow.tax) || 0) : 0;
     const taxAmt = Math.round(secureSubtotal * taxRate / 100 * 100) / 100;
     const finalAmount = Math.max(0, secureSubtotal + delFee + taxAmt - discountAmt);
 
     const pm = paymentMethod || 'Cash';
-    const ps = posPaymentStatus(pm);
+    const ps = posPaymentStatus(pm, paymentStatus);
     const os = source === 'online' ? ORDER_STATUS.PENDING : ORDER_STATUS.DELIVERED;
 
     const dateStr = new Date().toISOString();
     const result = await run(
-      `INSERT INTO sales (invoiceNumber,customerName,customerPhone,deliveryAddress,source,onlineOrderId,items,totalAmount,totalProfit,discount,date,businessId,paymentMethod,paymentStatus,orderStatus,deliveryFee,customerNotes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO sales (invoiceNumber,customerName,customerPhone,deliveryAddress,source,onlineOrderId,items,totalAmount,totalProfit,discount,date,businessId,paymentMethod,paymentStatus,orderStatus,deliveryFee,delivery_cost,customerNotes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceNumber, customerName || 'Walking Customer', customerPhone || '', deliveryAddress || '',
        source || 'pos', onlineOrderId || '', JSON.stringify(validatedItems), finalAmount, totalProfit,
-       discountAmt, dateStr, req.businessId, pm, ps, os, delFee, customerNotes || '']
+       discountAmt, dateStr, req.businessId, pm, ps, os, delFee, delFee, customerNotes || '']
     );
 
     await run(`UPDATE sales SET _id = ? WHERE id = ?`, [String(result.lastID), result.lastID]);
@@ -235,8 +344,13 @@ router.post('/sales', async (req, res) => {
     // Update stock
     for (const item of items) {
       if (item.productId) {
-        await run(`UPDATE products SET stock = MAX(0, stock - ?) WHERE (id = ? OR _id = ?) AND businessId = ?`,
-          [item.quantity, item.productId, item.productId, req.businessId]);
+        if (item.variantId) {
+          await run(`UPDATE product_variants SET stock = MAX(0, stock - ?) WHERE (id = ? OR _id = ?) AND productId = ? AND businessId = ?`,
+            [item.quantity, item.variantId, item.variantId, item.productId, req.businessId]);
+        } else {
+          await run(`UPDATE products SET stock = MAX(0, stock - ?) WHERE (id = ? OR _id = ?) AND businessId = ?`,
+            [item.quantity, item.productId, item.productId, req.businessId]);
+        }
       }
     }
 
@@ -256,6 +370,35 @@ router.get('/reports/summary', async (req, res) => {
     const lowStock = products.filter(p => p.stock < 10 && p.stock >= 0);
     const bestSelling = products.slice(0, 3).map(formatProduct);
     res.json({ totalSales, totalProfit, lowStockCount: lowStock.length, totalItems: products.length, bestSelling });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// ─── PAYMENT STATISTICS (PAID / COD) ──────────────────────────────────────────
+router.get('/reports/payment-stats', async (req, res) => {
+  try {
+    const biz = req.businessId;
+    const allSales = await all(`SELECT * FROM sales WHERE businessId = ?`, [biz]);
+    const allOnline = await all(`SELECT * FROM online_orders WHERE businessId = ?`, [biz]);
+
+    const paidSales = allSales.filter(s => s.paymentStatus === 'PAID');
+    const codSales  = allSales.filter(s => s.paymentStatus === 'UNPAID' || s.paymentStatus === 'COD');
+    const paidOnline = allOnline.filter(o => o.paymentStatus === 'PAID');
+    const codOnline  = allOnline.filter(o => o.paymentStatus === 'UNPAID' || o.paymentStatus === 'COD');
+
+    const paidCount = paidSales.length + paidOnline.length;
+    const codCount  = codSales.length  + codOnline.length;
+    const codAmountDue = codSales.reduce((s, x) => s + (x.totalAmount || 0), 0)
+                       + codOnline.reduce((s, x) => s + (x.totalAmount || 0), 0);
+    const paidAmount = paidSales.reduce((s, x) => s + (x.totalAmount || 0), 0)
+                    + paidOnline.reduce((s, x) => s + (x.totalAmount || 0), 0);
+
+    res.json({
+      totalOrders: allSales.length + allOnline.length,
+      paidCount,
+      codCount,
+      paidAmount,
+      codAmountDue
+    });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
@@ -307,7 +450,8 @@ router.post('/settings', async (req, res) => {
       'showOutOfStock','showWhatsappOrderBtn','themeColor','bannerMessage','invoicePrefix',
       'currency','autoInvoiceNumber','showAddressOnInvoice','logo','coverImage',
       'facebookUrl','instagramUrl','aboutText','bankName','accountName','accountNumber',
-      'bankBranch','bankNote','invoiceFooter','tax','defaultDeliveryFee','invoiceAccentColor'];
+      'bankBranch','bankNote','invoiceFooter','tax','defaultDeliveryFee','invoiceAccentColor',
+      'shopStyle','primaryColor','secondaryColor','buttonStyle','productCardStyle','fontTheme'];
 
     const updates = [], values = [];
     for (const key of allowed) {
@@ -394,11 +538,8 @@ router.patch('/online-orders/:id/mark-paid', async (req, res) => {
       [req.params.id, req.params.id, req.businessId]);
     if (!existing) return res.status(404).json({ success: false, message: 'Order not found' });
 
-    // Business rules: cannot mark paid if already refunded or cancelled
-    if (existing.paymentStatus === 'REFUNDED') {
-      return res.status(400).json({ success: false, message: 'Cannot mark a refunded order as paid' });
-    }
-    if (existing.paymentStatus === 'CANCELLED') {
+    // Business rules: cannot mark paid if the order itself is cancelled.
+    if (existing.orderStatus === 'CANCELLED') {
       return res.status(400).json({ success: false, message: 'Cannot mark a cancelled order as paid' });
     }
     if (existing.paymentStatus === 'PAID') {
@@ -424,6 +565,36 @@ router.patch('/online-orders/:id/mark-paid', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
+// Mark POS sale (invoice) as paid — used by the order-details "Mark as Paid" button
+router.patch('/sales/:id/mark-paid', async (req, res) => {
+  try {
+    const existing = await get(`SELECT * FROM sales WHERE (id = ? OR _id = ?) AND businessId = ?`,
+      [req.params.id, req.params.id, req.businessId]);
+    if (!existing) return res.status(404).json({ success: false, message: 'Sale not found' });
+
+    if (existing.paymentStatus === 'PAID') {
+      return res.status(400).json({ success: false, message: 'Order is already marked as paid' });
+    }
+
+    const dateStr = new Date().toISOString();
+    const businessInfo = await get(`SELECT businessName FROM businesses WHERE id = ?`, [req.businessId]);
+    const receivedBy = businessInfo ? businessInfo.businessName : 'Admin';
+
+    await run(`UPDATE sales SET paymentStatus = 'PAID', paymentReceivedAt = ?, paymentReceivedBy = ? WHERE (id = ? OR _id = ?) AND businessId = ?`,
+      [dateStr, receivedBy, req.params.id, req.params.id, req.businessId]);
+
+    await run(`INSERT INTO audit_logs (action, targetBusinessId, metadata, createdAt) VALUES (?,?,?,?)`,
+      ['SALE_MARKED_PAID', req.businessId,
+       JSON.stringify({ saleId: req.params.id, invoiceNumber: existing.invoiceNumber, customerName: existing.customerName }),
+       dateStr]);
+
+    const updated = await get(`SELECT * FROM sales WHERE (id = ? OR _id = ?) AND businessId = ?`,
+      [req.params.id, req.params.id, req.businessId]);
+    if (updated) updated.items = JSON.parse(updated.items || '[]');
+    res.json(updated);
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
 // Cancel order
 router.patch('/online-orders/:id/cancel', async (req, res) => {
   try {
@@ -435,7 +606,9 @@ router.patch('/online-orders/:id/cancel', async (req, res) => {
     }
 
     const dateStr = new Date().toISOString();
-    await run(`UPDATE online_orders SET orderStatus = 'CANCELLED', status = 'cancelled', paymentStatus = CASE WHEN paymentStatus='PAID' THEN 'REFUNDED' ELSE 'CANCELLED' END WHERE (id = ? OR _id = ?) AND businessId = ?`,
+    // Payment status stays PAID / UNPAID only. Cancelling an unpaid order keeps it UNPAID;
+    // cancelling a paid order keeps it PAID (refund handled separately if needed).
+    await run(`UPDATE online_orders SET orderStatus = 'CANCELLED', status = 'cancelled' WHERE (id = ? OR _id = ?) AND businessId = ?`,
       [req.params.id, req.params.id, req.businessId]);
 
     await run(`INSERT INTO audit_logs (action, targetBusinessId, metadata, createdAt) VALUES (?,?,?,?)`,

@@ -788,8 +788,44 @@
             if (shopSettings.coverImage) {
                 document.getElementById('coverPhoto').src = shopSettings.coverImage;
             }
-            if (shopSettings.themeColor) {
-                document.documentElement.style.setProperty('--accent-color', shopSettings.themeColor);
+            
+            // --- DYNAMIC STYLES ---
+            const root = document.documentElement;
+            if (shopSettings.themeColor) root.style.setProperty('--accent-color', shopSettings.themeColor);
+            if (shopSettings.secondaryColor) root.style.setProperty('--text-dark', shopSettings.secondaryColor);
+            
+            // Fonts
+            if (shopSettings.fontTheme) {
+                const fontMap = { 'Inter': 'Inter', 'Roboto': 'Roboto', 'Poppins': 'Poppins', 'Outfit': 'Outfit' };
+                const fontUrlMap = {
+                    'Inter': 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+                    'Roboto': 'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap',
+                    'Poppins': 'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap',
+                    'Outfit': 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap'
+                };
+                const f = shopSettings.fontTheme;
+                if (fontUrlMap[f]) {
+                    const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = fontUrlMap[f];
+                    document.head.appendChild(link);
+                    document.body.style.fontFamily = `'${fontMap[f]}', sans-serif`;
+                }
+            }
+
+            // Buttons
+            if (shopSettings.buttonStyle) {
+                if (shopSettings.buttonStyle === 'Pill') { root.style.setProperty('--radius-md', '50px'); root.style.setProperty('--radius-lg', '50px'); }
+                if (shopSettings.buttonStyle === 'Sharp') { root.style.setProperty('--radius-md', '4px'); root.style.setProperty('--radius-lg', '4px'); }
+            }
+            
+            // Cards
+            if (shopSettings.productCardStyle) {
+                if (shopSettings.productCardStyle === 'Flat') root.style.setProperty('--shadow', 'none');
+                if (shopSettings.productCardStyle === 'Bordered') {
+                    root.style.setProperty('--shadow', 'none');
+                    const s = document.createElement('style');
+                    s.innerHTML = `.product-card { border: 1px solid var(--border) !important; }`;
+                    document.head.appendChild(s);
+                }
             }
 
             const wa = shopSettings.whatsappNumber || shopSettings.shopPhone || "N/A";
@@ -884,7 +920,7 @@
 
                         <div style="display: flex; gap: 8px;">
                             <button class="btn-add" onclick="addToCart('${p._id}', this)" ${p.stock === 0 ? 'disabled' : ''} style="flex: 1; font-size: 12px; padding: 12px 5px;">
-                                <i class="fas fa-cart-plus"></i> CART
+                                <i class="fas fa-cart-plus"></i> ${p.hasVariants && p.variants?.length ? 'OPTIONS' : 'CART'}
                             </button>
                             <button class="btn-add" onclick="buyNow('${p._id}', this)" ${p.stock === 0 ? 'disabled' : ''} style="flex: 1.2; background: #25d366; font-size: 12px; padding: 12px 5px;">
                                 <i class="fab fa-whatsapp"></i> BUY NOW
@@ -899,15 +935,26 @@
             const p = products.find(x => x._id === id);
             if (!p) return;
 
-            const card = btn.closest('.product-card');
-            const qtyInput = card.querySelector('.qty-input-card');
-            const qty = parseInt(qtyInput.value) || 1;
+            if (p.hasVariants && p.variants && p.variants.length > 0) {
+                openShopVariantPicker(p, btn);
+                return;
+            }
 
-            const exist = cart.find(x => x._id === id);
+            const card = btn.closest('.product-card');
+            let qty = 1;
+            if (card) {
+                const qtyInput = card.querySelector('.qty-input-card');
+                if (qtyInput) {
+                    qty = parseInt(qtyInput.value) || 1;
+                    qtyInput.value = 1;
+                }
+            }
+
+            const exist = cart.find(x => x.cartId === id);
             if (exist) {
                 exist.quantity += qty;
             } else {
-                cart.push({ ...p, quantity: qty });
+                cart.push({ ...p, cartId: id, quantity: qty });
             }
             updateCartUI();
 
@@ -915,21 +962,76 @@
             const badge = document.getElementById('cartCountBadge');
             badge.style.transform = 'scale(1.3)';
             setTimeout(() => badge.style.transform = 'scale(1)', 200);
-
-            // Optional: reset input to 1
-            qtyInput.value = 1;
         }
 
+        function openShopVariantPicker(product, btn) {
+            const card = btn.closest('.product-card');
+            const qtyInput = card ? card.querySelector('.qty-input-card') : null;
+            const qty = qtyInput ? (parseInt(qtyInput.value) || 1) : 1;
+            const isBuyNow = btn.classList.contains('buy-now-trigger');
+
+            const m = document.createElement('div');
+            m.id = 'shopVariantModal';
+            m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+            m.innerHTML = `
+                <div style="background:#fff;width:100%;max-width:400px;border-radius:16px;padding:20px;max-height:80vh;overflow-y:auto;color:#0f172a;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                        <h3 style="font-size:18px;margin:0;color:#0f172a;">Select Option</h3>
+                        <button onclick="this.closest('#shopVariantModal').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#0f172a;">&times;</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        ${product.variants.filter(v => v.stock > 0).map(v => {
+                            const lbl = (v.label || Object.values(v.attributes||{}).join(' / ')).replace(/'/g, "\\'");
+                            const prc = v.price || product.price;
+                            return `
+                            <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:#fff;"
+                                 onclick="this.closest('#shopVariantModal').remove(); window.addVariantToShopCart('${product._id}', '${v._id}', '${lbl}', ${prc}, ${qty}); ${isBuyNow ? 'toggleCart(true);' : ''}">
+                                <div>
+                                    <div style="font-weight:600;color:#0f172a;">${lbl}</div>
+                                    <div style="font-size:12px;color:#64748b;">${v.stock} in stock</div>
+                                </div>
+                                <div style="font-weight:700;color:var(--accent-color);">${currency} ${prc.toLocaleString()}</div>
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(m);
+            if(qtyInput) qtyInput.value = 1;
+        }
+
+        window.addVariantToShopCart = function(productId, variantId, variantLabel, overridePrice, qty) {
+            const p = products.find(x => x._id === productId);
+            if (!p) return;
+            const cartId = `${productId}_${variantId}`;
+            const exist = cart.find(x => x.cartId === cartId);
+            if (exist) {
+                exist.quantity += qty;
+            } else {
+                cart.push({ 
+                    ...p, 
+                    cartId, 
+                    variantId, 
+                    variantLabel, 
+                    price: overridePrice,
+                    quantity: qty,
+                    name: p.name + ` (${variantLabel})`
+                });
+            }
+            updateCartUI();
+            const badge = document.getElementById('cartCountBadge');
+            badge.style.transform = 'scale(1.3)';
+            setTimeout(() => badge.style.transform = 'scale(1)', 200);
+        };
+
         function buyNow(id, btn) {
+            btn.classList.add('buy-now-trigger');
             addToCart(id, btn);
-            toggleCart(true);
-            setTimeout(() => {
-                const addrField = document.getElementById('orderAddress');
-                if (addrField) {
-                    addrField.focus();
-                    addrField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 400);
+            const p = products.find(x => x._id === id);
+            if (p && (!p.hasVariants || !p.variants || !p.variants.length)) {
+                toggleCart(true);
+            }
         }
 
         function updateCartUI() {

@@ -352,14 +352,31 @@ function buildProductView() {
         <div class="grid" id="productGrid">${productsHTML}</div>
     </div>
 
-    <div id="productModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;padding:20px;">
-        <div class="card" style="width:100%;max-width:500px;max-height:90vh;overflow-y:auto;">
+    <!-- Advanced Product Modal -->
+    <div id="productModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;">
+        <div class="card" style="width:100%;max-width:680px;margin:20px auto;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                 <h3 id="modalTitle">Add New Product</h3>
                 <button onclick="closeProductModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;"><i class="fas fa-times"></i></button>
             </div>
             <form id="productForm">
+                <!-- Basic Info -->
                 <div class="form-group"><label>Product Name *</label><input type="text" id="p_name" required></div>
+                <!-- Product Type Selector -->
+                <div class="form-group">
+                    <label>Product Type</label>
+                    <select id="p_type" onchange="onProductTypeChange()" style="background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 14px;width:100%;font-size:14px;">
+                        <option value="General">📦 General</option>
+                        <option value="Grocery">🛒 Grocery / Supermarket</option>
+                        <option value="Fashion">👗 Fashion / Clothing</option>
+                        <option value="Electronics">📱 Electronics</option>
+                        <option value="Beauty">💄 Beauty / Cosmetics</option>
+                        <option value="Custom">⚙️ Custom</option>
+                    </select>
+                </div>
+                <!-- Dynamic Type Fields -->
+                <div id="p_type_fields" style="margin-bottom:12px;"></div>
+                <!-- Price / Cost / Stock -->
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
                     <div class="form-group"><label>Selling Price *</label><input type="number" id="p_price" min="0" step="0.01" required></div>
                     <div class="form-group"><label>Cost Price</label><input type="number" id="p_cost" min="0" step="0.01" placeholder="For profit tracking"></div>
@@ -368,15 +385,36 @@ function buildProductView() {
                     <div class="form-group"><label>Stock Quantity *</label><input type="number" id="p_stock" min="0" required></div>
                     <div class="form-group"><label>Category</label><input type="text" id="p_category" placeholder="e.g. Groceries"></div>
                 </div>
+                <!-- Featured Toggle -->
                 <div class="form-group" style="display:flex;align-items:center;gap:10px;background:rgba(0,168,107,0.05);padding:12px;border-radius:8px;border:1px solid rgba(0,168,107,0.15);">
                     <input type="checkbox" id="p_featured" style="width:auto;cursor:pointer;">
                     <label for="p_featured" style="margin:0;cursor:pointer;font-size:14px;font-weight:600;">⭐ Featured Product (shown as HOT on shop)</label>
                 </div>
+                <!-- Image -->
                 <div class="form-group"><label>Product Image</label><input type="file" id="p_image" accept="image/*"></div>
                 <div id="editImgPreview" style="display:none;margin-bottom:16px;">
                     <label style="font-size:12px;">Current Image:</label>
                     <img id="editImgThumb" style="width:60px;height:60px;border-radius:8px;object-fit:cover;display:block;margin-top:6px;">
                 </div>
+
+                <!-- Variants Toggle -->
+                <div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                        <div>
+                            <div style="font-weight:700;font-size:14px;">🎛️ Product Variants</div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Enable if this product has multiple sizes, weights, or options</div>
+                        </div>
+                        <label class="switch"><input type="checkbox" id="p_hasVariants" onchange="onVariantsToggle()"><span class="slider round"></span></label>
+                    </div>
+                    <div id="variantBuilder" style="display:none;">
+                        <div id="variantOptionsArea"></div>
+                        <button type="button" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:12px;" onclick="generateVariants()">
+                            <i class="fas fa-magic"></i> Generate Variants
+                        </button>
+                        <div id="variantTable" style="margin-top:16px;"></div>
+                    </div>
+                </div>
+
                 <div style="display:flex;gap:10px;margin-top:4px;">
                     <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center;" id="saveProductBtn">SAVE PRODUCT</button>
                     <button type="button" class="btn btn-outline" style="flex:1;justify-content:center;" onclick="closeProductModal()">CANCEL</button>
@@ -386,11 +424,15 @@ function buildProductView() {
     </div>`;
 
     document.getElementById('productForm').addEventListener('submit', handleProductSave);
+    onProductTypeChange(); // set initial state
 }
 
 function productCardHTML(p) {
     const stockColor = p.stock === 0 ? '#ef4444' : p.stock < 10 ? '#f59e0b' : 'var(--accent)';
     const stockLabel = p.stock === 0 ? 'Out of Stock' : p.stock < 10 ? `Low: ${p.stock}` : `${p.stock} in stock`;
+    const typeIcons = { Grocery:'🛒', Fashion:'👗', Electronics:'📱', Beauty:'💄', General:'📦', Custom:'⚙️' };
+    const typeIcon = typeIcons[p.productType] || '📦';
+    const variantBadge = p.hasVariants && p.variants?.length ? `<span style="font-size:10px;background:rgba(0,168,107,0.15);color:var(--accent);padding:2px 7px;border-radius:4px;white-space:nowrap;">${p.variants.length} variants</span>` : '';
     return `
     <div class="card product-card">
         <div style="position:relative;">
@@ -399,9 +441,10 @@ function productCardHTML(p) {
         </div>
         <div class="product-info">
             <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
-                <h4 style="font-size:15px;line-height:1.3;">${p.name}</h4>
+                <h4 style="font-size:15px;line-height:1.3;">${typeIcon} ${p.name}</h4>
                 ${p.category ? `<span style="font-size:11px;background:var(--border);padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0;">${p.category}</span>` : ''}
             </div>
+            ${variantBadge ? `<div style="margin:4px 0;">${variantBadge}</div>` : ''}
             <div style="color:${stockColor};font-size:13px;margin:6px 0;">● ${stockLabel}</div>
             <div class="product-price">${formatCurrency(p.price)}</div>
             <div style="margin-top:14px;display:flex;gap:8px;">
@@ -412,12 +455,193 @@ function productCardHTML(p) {
     </div>`;
 }
 
+// ─── Product Type Templates ───────────────────────────────────────────────────
+const PRODUCT_TYPE_FIELDS = {
+    Grocery: [
+        { id: 'attr_weight_unit', label: 'Weight / Volume Options', placeholder: '250g, 500g, 1kg, 2kg, 5kg', hint: 'Comma-separated weight options' },
+        { id: 'attr_packaging', label: 'Packaging Types', placeholder: 'Pack, Bottle, Box, Piece', hint: 'Comma-separated packaging types' },
+    ],
+    Fashion: [
+        { id: 'attr_size', label: 'Sizes', placeholder: 'XS, S, M, L, XL, XXL', hint: 'Comma-separated sizes' },
+        { id: 'attr_color', label: 'Colors', placeholder: 'Black, White, Red, Blue', hint: 'Comma-separated colors' },
+        { id: 'attr_brand', label: 'Brand', placeholder: 'e.g. Nike, Zara' },
+        { id: 'attr_material', label: 'Material', placeholder: 'e.g. Cotton, Polyester' },
+        { id: 'attr_gender', label: 'Gender', placeholder: 'Unisex, Men, Women, Kids' },
+    ],
+    Electronics: [
+        { id: 'attr_brand', label: 'Brand', placeholder: 'e.g. Samsung, Apple' },
+        { id: 'attr_model', label: 'Model', placeholder: 'e.g. Galaxy S24' },
+        { id: 'attr_storage', label: 'Storage Options', placeholder: '64GB, 128GB, 256GB', hint: 'Comma-separated storage options' },
+        { id: 'attr_color', label: 'Colors', placeholder: 'Black, White, Gold', hint: 'Comma-separated colors' },
+        { id: 'attr_warranty', label: 'Warranty', placeholder: 'e.g. 1 Year' },
+    ],
+    Beauty: [
+        { id: 'attr_brand', label: 'Brand', placeholder: 'e.g. Loreal, MAC' },
+        { id: 'attr_size', label: 'Size', placeholder: 'Small, Large, Travel Size' },
+        { id: 'attr_volume', label: 'Volume Options', placeholder: '30ml, 50ml, 100ml', hint: 'Comma-separated volume options' },
+        { id: 'attr_shade', label: 'Shades', placeholder: 'Nude, Red, Pink', hint: 'Comma-separated shades' },
+        { id: 'attr_skin_type', label: 'Skin Type', placeholder: 'Oily, Dry, Normal, All' },
+        { id: 'attr_hair_type', label: 'Hair Type', placeholder: 'Straight, Curly, Wavy, Coily, All' },
+        { id: 'attr_custom', label: 'Custom Attributes', placeholder: 'e.g. SPF 50, Matte Finish' },
+    ],
+    General: [],
+    Custom: [
+        { id: 'attr_custom1', label: 'Custom Option 1', placeholder: 'Option values...' },
+        { id: 'attr_custom2', label: 'Custom Option 2', placeholder: 'Option values...' },
+    ]
+};
+
+const VARIANT_AXIS_FOR_TYPE = {
+    Grocery: ['attr_weight_unit', 'attr_packaging'],
+    Fashion: ['attr_size', 'attr_color'],
+    Electronics: ['attr_storage', 'attr_color'],
+    Beauty: ['attr_shade', 'attr_volume', 'attr_size'],
+    General: [],
+    Custom: ['attr_custom1', 'attr_custom2'],
+};
+
+window.onProductTypeChange = function() {
+    const type = document.getElementById('p_type')?.value || 'General';
+    const fields = PRODUCT_TYPE_FIELDS[type] || [];
+    const container = document.getElementById('p_type_fields');
+    if (!container) return;
+    if (!fields.length) { container.innerHTML = ''; return; }
+    container.innerHTML = `
+        <div style="background:rgba(0,168,107,0.04);border:1px solid rgba(0,168,107,0.15);border-radius:10px;padding:16px;margin-bottom:4px;">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent);margin-bottom:12px;">📋 ${type} Attributes</div>
+            ${fields.map(f => `
+                <div class="form-group" style="margin-bottom:10px;">
+                    <label style="font-size:13px;">${f.label}</label>
+                    <input type="text" id="${f.id}" placeholder="${f.placeholder}" style="font-size:13px;">
+                    ${f.hint ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${f.hint}</div>` : ''}
+                </div>`).join('')}
+        </div>`;
+
+    // Also update variant options area if variants are enabled
+    if (document.getElementById('p_hasVariants')?.checked) onVariantsToggle();
+};
+
+window.onVariantsToggle = function() {
+    const enabled = document.getElementById('p_hasVariants')?.checked;
+    const builder = document.getElementById('variantBuilder');
+    if (!builder) return;
+    builder.style.display = enabled ? 'block' : 'none';
+    if (!enabled) return;
+
+    const type = document.getElementById('p_type')?.value || 'General';
+    const axes = VARIANT_AXIS_FOR_TYPE[type] || [];
+    const fields = PRODUCT_TYPE_FIELDS[type] || [];
+    const optionsArea = document.getElementById('variantOptionsArea');
+
+    if (!axes.length) {
+        optionsArea.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Enter option values above (in the attribute fields) to generate variants.</div>`;
+        return;
+    }
+
+    const relevantFields = fields.filter(f => axes.includes(f.id));
+    optionsArea.innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Variants will be generated from the option fields below:</div>
+        ${relevantFields.map(f => `<div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--text);">${f.label}: <span style="color:var(--text-muted);font-weight:400;">${document.getElementById(f.id)?.value || '(none)'}</span></div>`).join('')}`;
+};
+
+// Global variant list for current product being edited
+window._currentVariants = [];
+
+window.generateVariants = function() {
+    const type = document.getElementById('p_type')?.value || 'General';
+    const axes = VARIANT_AXIS_FOR_TYPE[type] || [];
+    const fields = PRODUCT_TYPE_FIELDS[type] || [];
+    const basePrice = parseFloat(document.getElementById('p_price')?.value) || 0;
+
+    // Collect values per axis
+    const axisSets = axes.map(axisId => {
+        const field = fields.find(f => f.id === axisId);
+        const raw = document.getElementById(axisId)?.value || '';
+        const rawVals = raw.split(',').map(s => s.trim()).filter(Boolean);
+        const values = [];
+        const seen = new Set();
+        for (const v of rawVals) {
+            const norm = v.toLowerCase();
+            if (!seen.has(norm)) {
+                seen.add(norm);
+                values.push(v);
+            }
+        }
+        return { axisId, label: field?.label || axisId, values };
+    }).filter(a => a.values.length > 0);
+
+    if (!axisSets.length) {
+        showToast('Please fill in attribute options first, then click Generate.', 'warning');
+        return;
+    }
+
+    // Cross product of axes
+    const combos = axisSets.reduce((acc, axis) => {
+        if (!acc.length) return axis.values.map(v => [{ label: axis.label, value: v }]);
+        const next = [];
+        for (const existing of acc) {
+            for (const v of axis.values) {
+                next.push([...existing, { label: axis.label, value: v }]);
+            }
+        }
+        return next;
+    }, []);
+
+    // Build variant objects
+    window._currentVariants = combos.map(combo => {
+        const label = combo.map(c => c.value).join(' / ');
+        const skuBase = document.getElementById('p_name')?.value?.substring(0, 4).toUpperCase() || 'PRD';
+        const sku = skuBase + '-' + combo.map(c => c.value.substring(0, 3).toUpperCase().replace(/\s/g, '')).join('-');
+        return {
+            _id: '', label, sku, barcode: '', price: basePrice, stock: 10,
+            attributes: Object.fromEntries(combo.map(c => [c.label, c.value]))
+        };
+    });
+
+    renderVariantTable();
+};
+
+function renderVariantTable() {
+    const table = document.getElementById('variantTable');
+    if (!table) return;
+    if (!window._currentVariants.length) { table.innerHTML = ''; return; }
+    table.innerHTML = `
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:10px;">Generated Variants</div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border);">
+                    <th style="text-align:left;padding:6px 4px;color:var(--text-muted);">Variant</th>
+                    <th style="text-align:left;padding:6px 4px;color:var(--text-muted);">SKU</th>
+                    <th style="text-align:right;padding:6px 4px;color:var(--text-muted);">Price</th>
+                    <th style="text-align:right;padding:6px 4px;color:var(--text-muted);">Stock</th>
+                    <th style="padding:6px 4px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${window._currentVariants.map((v, i) => `
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <td style="padding:6px 4px;font-weight:600;">${v.label}</td>
+                        <td style="padding:6px 4px;"><input type="text" value="${v.sku}" style="width:90px;font-size:11px;padding:4px 6px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:4px;color:var(--text);" onchange="window._currentVariants[${i}].sku=this.value"></td>
+                        <td style="padding:6px 4px;text-align:right;"><input type="number" value="${v.price}" min="0" step="0.01" style="width:80px;font-size:11px;padding:4px 6px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:4px;color:var(--text);text-align:right;" onchange="window._currentVariants[${i}].price=parseFloat(this.value)||0"></td>
+                        <td style="padding:6px 4px;text-align:right;"><input type="number" value="${v.stock}" min="0" style="width:60px;font-size:11px;padding:4px 6px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:4px;color:var(--text);text-align:right;" onchange="window._currentVariants[${i}].stock=parseInt(this.value)||0"></td>
+                        <td style="padding:6px 4px;"><button type="button" onclick="window._currentVariants.splice(${i},1);renderVariantTable();" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;">✕</button></td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>
+        </div>`;
+}
+
 window.showProductModal = function() {
     document.getElementById('productModal').style.display = 'flex';
     document.getElementById('productForm').reset();
     document.getElementById('productForm').dataset.editId = '';
     document.getElementById('modalTitle').innerText = 'Add New Product';
     document.getElementById('editImgPreview').style.display = 'none';
+    window._currentVariants = [];
+    if (document.getElementById('variantTable')) document.getElementById('variantTable').innerHTML = '';
+    if (document.getElementById('variantBuilder')) document.getElementById('variantBuilder').style.display = 'none';
+    onProductTypeChange();
 };
 
 window.closeProductModal = function() {
@@ -451,6 +675,16 @@ async function handleProductSave(e) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     btn.disabled = true;
 
+    const type = document.getElementById('p_type')?.value || 'General';
+    const fields = PRODUCT_TYPE_FIELDS[type] || [];
+    const attrs = {};
+    fields.forEach(f => {
+        const val = document.getElementById(f.id)?.value || '';
+        if (val) attrs[f.id.replace('attr_', '')] = val;
+    });
+
+    const hasVar = document.getElementById('p_hasVariants')?.checked || false;
+
     const formData = new FormData();
     formData.append('name', document.getElementById('p_name').value);
     formData.append('price', document.getElementById('p_price').value);
@@ -458,6 +692,12 @@ async function handleProductSave(e) {
     formData.append('stock', document.getElementById('p_stock').value);
     formData.append('category', document.getElementById('p_category').value);
     formData.append('isFeatured', document.getElementById('p_featured').checked);
+    formData.append('productType', type);
+    formData.append('attributes', JSON.stringify(attrs));
+    formData.append('hasVariants', hasVar);
+    if (hasVar && window._currentVariants.length) {
+        formData.append('variants', JSON.stringify(window._currentVariants));
+    }
     const fileInput = document.getElementById('p_image');
     if (fileInput.files[0]) formData.append('image', fileInput.files[0]);
 
@@ -491,6 +731,39 @@ window.editProduct = function(id) {
     document.getElementById('p_stock').value = p.stock;
     document.getElementById('p_category').value = p.category || '';
     document.getElementById('p_featured').checked = Boolean(p.isFeatured);
+
+    // Set product type and render attributes
+    const typeEl = document.getElementById('p_type');
+    if (typeEl) typeEl.value = p.productType || 'General';
+    onProductTypeChange();
+
+    // Fill attribute values
+    const attrs = p.attributes || {};
+    const fields = PRODUCT_TYPE_FIELDS[p.productType || 'General'] || [];
+    fields.forEach(f => {
+        const key = f.id.replace('attr_', '');
+        const el = document.getElementById(f.id);
+        if (el && attrs[key]) el.value = attrs[key];
+    });
+
+    // Load variants
+    if (p.hasVariants && p.variants?.length) {
+        const varToggle = document.getElementById('p_hasVariants');
+        if (varToggle) varToggle.checked = true;
+        window._currentVariants = p.variants.map(v => ({
+            _id: v._id || '',
+            label: Object.values(v.attributes || {}).join(' / '),
+            sku: v.sku || '',
+            barcode: v.barcode || '',
+            price: v.price || p.price,
+            stock: v.stock || 0,
+            attributes: v.attributes || {}
+        }));
+        const builder = document.getElementById('variantBuilder');
+        if (builder) builder.style.display = 'block';
+        renderVariantTable();
+    }
+
     if (p.image) {
         document.getElementById('editImgPreview').style.display = 'block';
         document.getElementById('editImgThumb').src = getThumbnailUrl(p.image, 80);
@@ -536,11 +809,12 @@ function buildBillingView(products) {
                 </div>
                 <div class="grid" id="billProductGrid">
                     ${products.length ? products.map(p => `
-                        <div class="card" style="padding:14px;cursor:pointer;transition:all 0.2s;" onclick="addToCart('${p._id}','${p.name.replace(/'/g,"\\'")}',${p.price})" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+                        <div class="card" style="padding:14px;cursor:pointer;transition:all 0.2s;" onclick="addToCart('${p._id}')" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
                             ${p.image ? `<img src="${getThumbnailUrl(p.image,100)}" style="width:100%;height:80px;object-fit:cover;border-radius:6px;margin-bottom:10px;">` : ''}
                             <div style="font-weight:600;font-size:14px;line-height:1.3;">${p.name}</div>
                             <div style="color:var(--accent);font-weight:700;margin-top:4px;">${formatCurrency(p.price)}</div>
                             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.stock} in stock</div>
+                            ${p.hasVariants && p.variants?.length ? `<div style="font-size:10px;background:rgba(0,168,107,0.15);color:var(--accent);padding:2px 7px;border-radius:4px;margin-top:6px;display:inline-block;">${p.variants.length} variants</div>` : ''}
                         </div>`).join('') :
                         `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">No products in stock. <a href="#products" onclick="window.location.hash='#products'">Add products →</a></div>`}
                 </div>
@@ -555,23 +829,73 @@ function buildBillingView(products) {
                     <div class="form-group" style="margin-bottom:0;">
                         <input type="text" id="custPhone" placeholder="Phone / Address (optional)">
                     </div>
-                    <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+
+                    <!-- PAYMENT STATUS SELECTOR -->
+                    <div style="margin:16px 0 14px;">
+                        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:10px;">Payment Status</div>
+                        <div style="display:flex;gap:10px;">
+                            <div id="ps-paid" class="ps-option" onclick="setPaymentStatus('PAID')" style="flex:1;cursor:pointer;text-align:center;padding:12px 8px;border-radius:10px;border:2px solid #a7f3d0;background:#ecfdf5;transition:all 0.2s;">
+                                <div style="font-size:18px;margin-bottom:4px;">✅</div>
+                                <div style="font-weight:700;font-size:13px;color:#059669;">PAID</div>
+                                <div style="font-size:10px;color:#64748b;margin-top:2px;">Payment Done</div>
+                            </div>
+                            <div id="ps-cod" class="ps-option" onclick="setPaymentStatus('COD')" style="flex:1;cursor:pointer;text-align:center;padding:12px 8px;border-radius:10px;border:2px solid var(--border);background:var(--bg-card);transition:all 0.2s;">
+                                <div style="font-size:18px;margin-bottom:4px;">🚚</div>
+                                <div style="font-weight:700;font-size:13px;color:var(--text);">COD</div>
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Cash Delivery</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr style="border:none;border-top:1px solid var(--border);margin:0 0 14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                         <h3 style="margin:0;">Cart</h3>
                         <span style="font-size:13px;background:rgba(0,168,107,0.1);color:var(--accent);padding:3px 10px;border-radius:20px;" id="cartCount">0 items</span>
                     </div>
-                    <div id="cartItems" style="max-height:320px;overflow-y:auto;margin-bottom:16px;">
+                    <div id="cartItems" style="max-height:280px;overflow-y:auto;margin-bottom:16px;">
                         <p style="color:var(--text-muted);text-align:center;padding:20px;font-size:14px;">Cart is empty</p>
                     </div>
-                    <div class="form-group" style="margin-bottom:12px;">
-                        <label style="font-size:13px;">Discount</label>
-                        <input type="number" id="discountAmt" placeholder="0" min="0" style="font-size:14px;" oninput="updateCartUI()">
+
+                    <!-- Discount -->
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">Discount</label>
+                        <input type="number" id="discountAmt" placeholder="0.00" min="0" step="0.01" style="font-size:14px;" oninput="updateCartUI()">
                     </div>
+
+                    <!-- Delivery Cost -->
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">
+                            <i class="fas fa-truck" style="margin-right:5px;color:#3b82f6;"></i>Delivery Cost
+                        </label>
+                        <input type="number" id="deliveryCost" placeholder="0.00" min="0" step="0.01" value="0" style="font-size:14px;" oninput="updateCartUI()">
+                    </div>
+
                     <hr style="border:none;border-top:1px solid var(--border);margin:0 0 14px;">
-                    <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin-bottom:18px;">
-                        <span>Total</span>
-                        <span id="cartTotal" style="color:var(--accent);">${formatCurrency(0)}</span>
+
+                    <!-- Totals Breakdown -->
+                    <div style="margin-bottom:16px;font-size:14px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                            <span style="color:var(--text-muted);">Subtotal</span>
+                            <span id="cartSubtotal">${formatCurrency(0)}</span>
+                        </div>
+                        <div id="discountRow" style="display:none;justify-content:space-between;margin-bottom:6px;">
+                            <span style="color:#ef4444;">Discount</span>
+                            <span id="cartDiscountVal" style="color:#ef4444;"></span>
+                        </div>
+                        <div id="deliveryRow" style="display:none;justify-content:space-between;margin-bottom:6px;">
+                            <span style="color:#3b82f6;"><i class="fas fa-truck" style="font-size:11px;margin-right:4px;"></i>Delivery</span>
+                            <span id="cartDeliveryVal" style="color:#3b82f6;"></span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;padding-top:8px;border-top:1px solid var(--border);margin-top:4px;">
+                            <span>Grand Total</span>
+                            <span id="cartTotal" style="color:var(--accent);">${formatCurrency(0)}</span>
+                        </div>
+                        <div id="amountDueRow" style="display:none;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;margin-top:4px;border-top:1px dashed var(--border);">
+                            <span style="color:#f59e0b;"><i class="fas fa-clock" style="font-size:11px;margin-right:4px;"></i>Amount Due (COD)</span>
+                            <span id="cartAmountDue" style="color:#f59e0b;"></span>
+                        </div>
                     </div>
+
                     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:15px;" onclick="checkout()">
                         <i class="fas fa-check"></i> COMPLETE SALE
                     </button>
@@ -581,6 +905,10 @@ function buildBillingView(products) {
     </div>`;
 
     window._billProducts = products;
+    // Initialize payment status selector (PAID is the default)
+    currentPaymentStatus = 'PAID';
+    setPaymentStatus('PAID');
+    updateCartUI();
 }
 
 let _billProducts = [];
@@ -588,18 +916,69 @@ window.filterBillProducts = function() {
     const q = document.getElementById('billSearch')?.value?.toLowerCase() || '';
     const filtered = window._billProducts.filter(p => p.name.toLowerCase().includes(q));
     document.getElementById('billProductGrid').innerHTML = filtered.map(p => `
-        <div class="card" style="padding:14px;cursor:pointer;" onclick="addToCart('${p._id}','${p.name.replace(/'/g,"\\'")}',${p.price})" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div class="card" style="padding:14px;cursor:pointer;" onclick="addToCart('${p._id}')" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
             ${p.image ? `<img src="${getThumbnailUrl(p.image,100)}" style="width:100%;height:80px;object-fit:cover;border-radius:6px;margin-bottom:10px;">` : ''}
             <div style="font-weight:600;font-size:14px;">${p.name}</div>
             <div style="color:var(--accent);font-weight:700;margin-top:4px;">${formatCurrency(p.price)}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.stock} in stock</div>
+            ${p.hasVariants && p.variants?.length ? `<div style="font-size:10px;background:rgba(0,168,107,0.15);color:var(--accent);padding:2px 7px;border-radius:4px;margin-top:6px;display:inline-block;">${p.variants.length} variants</div>` : ''}
         </div>`).join('') || `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted);">No matching products.</div>`;
 };
 
-window.addToCart = function(id, name, price) {
-    const existing = cart.find(x => x.productId === id);
+// ─── Variant Picker Modal ─────────────────────────────────────────────────────
+window.addToCart = function(id) {
+    const product = window._billProducts.find(p => p._id === id || String(p.id) === String(id));
+    if (!product) return;
+
+    // If product has variants, open picker modal
+    if (product.hasVariants && product.variants && product.variants.length > 0) {
+        openVariantPicker(product);
+        return;
+    }
+
+    // Simple product — add directly
+    const existing = cart.find(x => x.productId === id && !x.variantId);
     if (existing) { existing.quantity += 1; existing.total = existing.quantity * existing.price; }
-    else { cart.push({ productId: id, name, price, quantity: 1, total: price }); }
+    else { cart.push({ productId: id, name: product.name, price: product.price, quantity: 1, total: product.price, variantId: '', variantLabel: '' }); }
+    updateCartUI();
+};
+
+function openVariantPicker(product) {
+    const existingModal = document.getElementById('variantPickerModal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'variantPickerModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+        <div class="card" style="width:100%;max-width:440px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="font-size:16px;">${product.name}</h3>
+                <button onclick="document.getElementById('variantPickerModal').remove()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Select a variant:</div>
+            <div style="display:flex;flex-direction:column;gap:8px;" id="variantOptionsList">
+                ${product.variants.filter(v => v.stock > 0).map(v => `
+                    <button type="button" class="btn btn-outline" style="justify-content:space-between;padding:12px 14px;text-align:left;"
+                        onclick="addVariantToCart('${product._id}','${product.name.replace(/'/g, "\\'")}',${ v.price || product.price },'${v._id}','${(v.label || Object.values(v.attributes||{}).join(' / ')).replace(/'/g, "\\'")}',${ v.stock }); document.getElementById('variantPickerModal').remove();">
+                        <span style="font-weight:600;">${v.label || Object.values(v.attributes||{}).join(' / ')}</span>
+                        <span style="color:var(--accent);font-weight:700;">${formatCurrency(v.price || product.price)} <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${v.stock} left)</span></span>
+                    </button>`).join('')}
+                ${product.variants.every(v => v.stock <= 0) ? `<div style="text-align:center;padding:20px;color:var(--text-muted);">All variants are out of stock</div>` : ''}
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+window.addVariantToCart = function(productId, name, price, variantId, variantLabel, stock) {
+    const key = `${productId}_${variantId}`;
+    const existing = cart.find(x => x.productId === productId && x.variantId === variantId);
+    if (existing) {
+        if (existing.quantity >= stock) { showToast('Insufficient stock for this variant', 'warning'); return; }
+        existing.quantity += 1; existing.total = existing.quantity * existing.price;
+    } else {
+        cart.push({ productId, variantId, variantLabel, name, price, quantity: 1, total: price });
+    }
     updateCartUI();
 };
 
@@ -611,8 +990,16 @@ function updateCartUI() {
 
     if (cart.length === 0) {
         list.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;font-size:14px;">Cart is empty</p>';
-        totalEl.textContent = formatCurrency(0);
-        countEl.textContent = '0 items';
+        if (totalEl) totalEl.textContent = formatCurrency(0);
+        if (countEl) countEl.textContent = '0 items';
+        const subtotalEl2 = document.getElementById('cartSubtotal');
+        if (subtotalEl2) subtotalEl2.textContent = formatCurrency(0);
+        const dr = document.getElementById('discountRow');
+        if (dr) dr.style.display = 'none';
+        const dlr = document.getElementById('deliveryRow');
+        if (dlr) dlr.style.display = 'none';
+        const adr = document.getElementById('amountDueRow');
+        if (adr) adr.style.display = 'none';
         return;
     }
 
@@ -620,6 +1007,7 @@ function updateCartUI() {
         <div style="display:flex;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
             <div style="flex:1;">
                 <div style="font-weight:600;font-size:14px;">${item.name}</div>
+                ${item.variantLabel ? `<div style="font-size:11px;color:var(--accent);margin-top:2px;">↳ ${item.variantLabel}</div>` : ''}
                 <div style="font-size:13px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:8px;">
                     ${formatCurrency(item.price)} × 
                     <input type="number" value="${item.quantity}" min="1" onchange="updateQuantity(${idx},this.value)"
@@ -633,10 +1021,38 @@ function updateCartUI() {
         </div>`).join('');
 
     const subtotal = cart.reduce((sum, x) => sum + x.total, 0);
-    const discount = parseFloat(document.getElementById('discountAmt')?.value || 0);
-    const total = Math.max(0, subtotal - discount);
-    totalEl.textContent = formatCurrency(total);
+    const discount = Math.max(0, parseFloat(document.getElementById('discountAmt')?.value) || 0);
+    const deliveryCost = Math.max(0, parseFloat(document.getElementById('deliveryCost')?.value) || 0);
+    const grandTotal = Math.max(0, subtotal - discount + deliveryCost);
+
+    // Update subtotal line
+    const subtotalEl = document.getElementById('cartSubtotal');
+    if (subtotalEl) subtotalEl.textContent = formatCurrency(subtotal);
+
+    // Discount row — show only when non-zero
+    const discountRow = document.getElementById('discountRow');
+    const discountValEl = document.getElementById('cartDiscountVal');
+    if (discountRow) discountRow.style.display = discount > 0 ? 'flex' : 'none';
+    if (discountValEl) discountValEl.textContent = `- ${formatCurrency(discount)}`;
+
+    // Delivery row — show only when non-zero
+    const deliveryRow = document.getElementById('deliveryRow');
+    const deliveryValEl = document.getElementById('cartDeliveryVal');
+    if (deliveryRow) deliveryRow.style.display = deliveryCost > 0 ? 'flex' : 'none';
+    if (deliveryValEl) deliveryValEl.textContent = `+ ${formatCurrency(deliveryCost)}`;
+
+    // Grand total
+    totalEl.textContent = formatCurrency(grandTotal);
     countEl.textContent = `${cart.reduce((s, x) => s + x.quantity, 0)} items`;
+
+    // Amount Due row — show only for COD
+    const amountDueRow = document.getElementById('amountDueRow');
+    const amountDueEl = document.getElementById('cartAmountDue');
+    if (amountDueRow) {
+        const isCOD = currentPaymentStatus === 'COD';
+        amountDueRow.style.display = isCOD ? 'flex' : 'none';
+        if (amountDueEl) amountDueEl.textContent = formatCurrency(isCOD ? grandTotal : 0);
+    }
 }
 
 window.updateQuantity = function(idx, val) {
@@ -652,14 +1068,39 @@ window.removeFromCart = function(idx) {
     updateCartUI();
 };
 
+// ─── Billing: Payment Status Selector ────────────────────────────────────────
+// PAID is the default. COD orders are UNPAID until the merchant marks them paid.
+let currentPaymentStatus = 'PAID';
+
+window.setPaymentStatus = function(status) {
+    currentPaymentStatus = status;
+    const paid = document.getElementById('ps-paid');
+    const cod = document.getElementById('ps-cod');
+    if (status === 'PAID') {
+        if (paid) { paid.style.borderColor = '#a7f3d0'; paid.style.background = '#ecfdf5'; }
+        if (cod) { cod.style.borderColor = 'var(--border)'; cod.style.background = 'var(--bg-card)'; }
+    } else {
+        if (paid) { paid.style.borderColor = 'var(--border)'; paid.style.background = 'var(--bg-card)'; }
+        if (cod) { cod.style.borderColor = '#f59e0b'; cod.style.background = '#fffbeb'; }
+    }
+    // Refresh amount due row to reflect PAID vs COD
+    updateCartUI();
+};
+
+window.togglePaymentStatus = function(status) {
+    setPaymentStatus(status);
+};
+
 async function checkout() {
     if (cart.length === 0) { showToast('Cart is empty!', 'warning'); return; }
     const custName = document.getElementById('custName')?.value || 'Walking Customer';
     const custPhone = document.getElementById('custPhone')?.value || '';
-    const discount = parseFloat(document.getElementById('discountAmt')?.value || 0);
-    const paymentMethod = document.querySelector('input[name="posPayMethod"]:checked')?.value || 'Cash';
+    const discount = Math.max(0, parseFloat(document.getElementById('discountAmt')?.value) || 0);
+    const deliveryCost = Math.max(0, parseFloat(document.getElementById('deliveryCost')?.value) || 0);
+    const paymentMethod = 'Cash';
     const subtotal = cart.reduce((sum, x) => sum + x.total, 0);
-    const totalAmount = Math.max(0, subtotal - discount);
+    const grandTotal = Math.max(0, subtotal - discount + deliveryCost);
+    const paymentStatus = currentPaymentStatus;
 
     const btn = document.querySelector('.cart-card .btn-primary');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; }
@@ -667,19 +1108,20 @@ async function checkout() {
     try {
         const res = await axios.post(`${API_URL}/sales`, {
             items: cart, customerName: custName, customerPhone: custPhone,
-            discount, paymentMethod
+            discount, paymentMethod, paymentStatus,
+            delivery_cost: deliveryCost, deliveryFee: deliveryCost
         });
         const sale = res.data;
         const settingsRes = await axios.get(`${API_URL}/settings`);
         _settings = settingsRes.data;
 
-        await generatePremiumJPG(sale, _settings);
+        await generatePremiumJPG(sale, _settings, custName, custPhone);
 
         const shareModal = document.getElementById('shareModal');
         shareModal.style.display = 'flex';
         document.getElementById('modalWaNumber').value = custPhone;
 
-        // Improved WhatsApp message for POS
+        // WhatsApp message
         document.getElementById('btnShareWA').onclick = () => {
             const currency = _settings.currency || 'Rs.';
             const storeName = _settings.shopName || 'QuickBill POS';
@@ -687,6 +1129,7 @@ async function checkout() {
                 `  • ${i.name} ×${i.quantity}  ${currency} ${(i.total||0).toLocaleString()}`
             ).join('\n');
             const discLine = discount > 0 ? `\n🏷️ Discount: -${currency} ${discount.toLocaleString()}` : '';
+            const delivLine = deliveryCost > 0 ? `\n🚚 Delivery: +${currency} ${deliveryCost.toLocaleString()}` : '';
             const msg = [
                 `🛍️ *${storeName}*`,
                 `🧾 *Invoice ${sale.invoiceNumber}*`,
@@ -697,9 +1140,11 @@ async function checkout() {
                 `📦 *Items:*`,
                 itemsList,
                 discLine,
+                delivLine,
                 ``,
-                `💳 Payment: ${paymentMethod}`,
-                `💰 *Total: ${currency} ${totalAmount.toLocaleString()}*`,
+                `💳 Payment: ${paymentStatus === 'COD' ? 'Cash on Delivery (COD)' : 'PAID'}`,
+                `💰 *Grand Total: ${currency} ${grandTotal.toLocaleString()}*`,
+                paymentStatus === 'COD' ? `⏳ *Amount Due: ${currency} ${grandTotal.toLocaleString()}*` : `✅ *Amount Due: ${currency} 0*`,
                 ``,
                 `Thank you for your purchase! 🙏`
             ].filter(l => l !== '').join('\n');
@@ -751,19 +1196,83 @@ async function generatePremiumJPG(sale, settings, custName, custPhone) {
 
     document.getElementById('inv-number').innerText = `#${sale.invoiceNumber}`;
     document.getElementById('inv-date').innerText = new Date(sale.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-    document.getElementById('inv-cust-name').innerText = custName || 'Walking Customer';
-    document.getElementById('inv-cust-contact').innerText = custPhone || 'N/A';
+    document.getElementById('inv-cust-name').innerText = custName || sale.customerName || 'Walking Customer';
+    document.getElementById('inv-cust-contact').innerText = custPhone || sale.customerPhone || 'N/A';
 
+    // ─── Payment status badge ──────────────────────────────────────────────────
+    const isPaid = String(sale.paymentStatus).toUpperCase() === 'PAID';
+    const badge = document.getElementById('inv-payment-badge');
+    const dot = document.getElementById('inv-payment-dot');
+    const text = document.getElementById('inv-payment-text');
+    const dueRow = document.getElementById('inv-amount-due-row');
+    const dueEl = document.getElementById('inv-amount-due');
+
+    if (isPaid) {
+        badge.style.background = '#ecfdf5';
+        badge.style.color = '#059669';
+        badge.style.border = '1px solid #a7f3d0';
+        dot.style.color = '#059669';
+        dot.className = 'fas fa-check-circle';
+        text.textContent = 'PAID';
+        if (dueRow) dueRow.style.display = 'none';
+    } else {
+        badge.style.background = '#fffbeb';
+        badge.style.color = '#b45309';
+        badge.style.border = '1px solid #fde68a';
+        dot.style.color = '#f59e0b';
+        dot.className = 'fas fa-circle-dot';
+        text.textContent = 'COD';
+        if (dueRow) {
+            dueRow.style.display = 'flex';
+            if (dueEl) dueEl.textContent = `${currency} ${sale.totalAmount.toLocaleString()}`;
+        }
+    }
+
+    // ─── Items ─────────────────────────────────────────────────────────────────
     const itemsBody = document.getElementById('inv-items');
     itemsBody.innerHTML = sale.items.map(i => `
         <tr style="border-bottom:1px solid #f1f5f9;">
-            <td style="padding:12px 0;"><div style="font-weight:600;color:#334155;font-size:13px;">${i.name}</div></td>
+            <td style="padding:12px 0;">
+                <div style="font-weight:600;color:#334155;font-size:13px;">${i.name}</div>
+                ${i.variantLabel ? `<div style="font-size:11px;color:#64748b;margin-top:2px;max-width:250px;white-space:normal;word-break:break-word;line-height:1.4;">↳ ${i.variantLabel}</div>` : ''}
+            </td>
             <td style="padding:12px 0;text-align:center;color:#64748b;">${i.quantity}</td>
             <td style="padding:12px 0;text-align:right;color:#64748b;">${currency} ${i.price.toLocaleString()}</td>
             <td style="padding:12px 0;text-align:right;font-weight:700;color:#0f172a;">${currency} ${i.total.toLocaleString()}</td>
         </tr>`).join('');
 
-    document.getElementById('inv-subtotal').innerText = `${currency} ${sale.totalAmount.toLocaleString()}`;
+    // ─── Totals: subtotal, discount, delivery, grand total ─────────────────────
+    // Calculate subtotal from items
+    const itemsSubtotal = sale.items.reduce((s, i) => s + (i.total || 0), 0);
+    const saleDiscount = parseFloat(sale.discount) || 0;
+    const saleDelivery = parseFloat(sale.delivery_cost ?? sale.deliveryFee) || 0;
+
+    document.getElementById('inv-subtotal').innerText = `${currency} ${itemsSubtotal.toLocaleString()}`;
+
+    // Discount row
+    const invDiscountRow = document.getElementById('inv-discount-row');
+    const invDiscountEl = document.getElementById('inv-discount');
+    if (invDiscountRow) {
+        if (saleDiscount > 0) {
+            invDiscountRow.style.display = 'flex';
+            if (invDiscountEl) invDiscountEl.textContent = `- ${currency} ${saleDiscount.toLocaleString()}`;
+        } else {
+            invDiscountRow.style.display = 'none';
+        }
+    }
+
+    // Delivery row
+    const invDeliveryRow = document.getElementById('inv-delivery-row');
+    const invDeliveryEl = document.getElementById('inv-delivery');
+    if (invDeliveryRow) {
+        if (saleDelivery > 0) {
+            invDeliveryRow.style.display = 'flex';
+            if (invDeliveryEl) invDeliveryEl.textContent = `${currency} ${saleDelivery.toLocaleString()}`;
+        } else {
+            invDeliveryRow.style.display = 'none';
+        }
+    }
+
     document.getElementById('inv-total').innerText = `${currency} ${sale.totalAmount.toLocaleString()}`;
     document.getElementById('inv-footer-msg').innerText = settings.invoiceFooter || 'Thank you for shopping with us!';
 
@@ -904,6 +1413,46 @@ window.filterSalesTable = function() {
     document.getElementById('salesTableBody').innerHTML = renderSalesRows(filtered);
 };
 
+// ─── Payment Status Badge Helper ─────────────────────────────────────────────
+function paymentBadgeHTML(status) {
+    const isPaid = String(status).toUpperCase() === 'PAID';
+    if (isPaid) {
+        return `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:#ecfdf5;color:#059669;font-weight:700;font-size:12px;border:1px solid #a7f3d0;"><i class="fas fa-circle" style="font-size:7px;"></i> PAID</span>`;
+    }
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:#fffbeb;color:#b45309;font-weight:700;font-size:12px;border:1px solid #fde68a;"><i class="fas fa-circle" style="font-size:7px;"></i> UNPAID (COD)</span>`;
+}
+
+// Mark a COD sale as paid — confirmation dialog → server update → success toast
+window.markSalePaid = function(saleId, invoiceNumber, customerName, totalAmount) {
+    const currency = _settings.currency || 'Rs.';
+    const message = `
+            <div style="margin-bottom:14px;">Mark this COD order as paid?</div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;text-align:left;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span style="color:var(--text-muted);font-size:13px;">Order Number</span>
+                    <span style="font-weight:700;">#${invoiceNumber}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span style="color:var(--text-muted);font-size:13px;">Customer</span>
+                    <span style="font-weight:700;">${customerName}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                    <span style="color:var(--text-muted);font-size:13px;">Total Amount</span>
+                    <span style="font-weight:700;color:#f59e0b;">${currency} ${Number(totalAmount).toLocaleString()}</span>
+                </div>
+            </div>`;
+    showConfirm(message, async () => {
+        try {
+            await axios.patch(`${API_URL}/sales/${saleId}/mark-paid`);
+            showToast('Payment marked as paid');
+            // Re-open the modal to reflect the new status
+            showSaleDetails(saleId);
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Failed to mark as paid', 'error');
+        }
+    }, 'Mark as Paid');
+};
+
 window.loadReportRange = async function(mode) {
     const from = mode === 'all' ? '' : (document.getElementById('reportFrom')?.value || '');
     const to = mode === 'all' ? '' : (document.getElementById('reportTo')?.value || '');
@@ -942,13 +1491,45 @@ window.showSaleDetails = async function(saleId) {
         const res = await axios.get(`${API_URL}/sales/${saleId}`);
         const s = res.data;
         const currency = _settings.currency || 'Rs.';
+        const isPaid = String(s.paymentStatus).toUpperCase() === 'PAID';
+        const saleDiscount = parseFloat(s.discount) || 0;
+        const saleDelivery = parseFloat(s.delivery_cost ?? s.deliveryFee) || 0;
+        const itemsSubtotal = s.items.reduce((sum, i) => sum + (i.total || 0), 0);
+
         const itemsHtml = s.items.map(i => `
             <tr style="border-bottom:1px solid var(--border);">
-                <td style="padding:10px 0;">${i.name}</td>
+                <td style="padding:10px 0;">${i.name}${i.variantLabel ? `<div style="font-size:11px;color:var(--accent);">↳ ${i.variantLabel}</div>` : ''}</td>
                 <td style="padding:10px 0;text-align:center;">${i.quantity}</td>
                 <td style="padding:10px 0;text-align:right;">${currency} ${i.price.toLocaleString()}</td>
                 <td style="padding:10px 0;text-align:right;font-weight:700;color:var(--accent);">${currency} ${i.total.toLocaleString()}</td>
             </tr>`).join('');
+
+        const totalsHtml = `
+            <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;">
+                    <span style="color:var(--text-muted);">Subtotal</span>
+                    <span>${currency} ${itemsSubtotal.toLocaleString()}</span>
+                </div>
+                ${saleDiscount > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;">
+                    <span style="color:#ef4444;">Discount</span>
+                    <span style="color:#ef4444;">- ${currency} ${saleDiscount.toLocaleString()}</span>
+                </div>` : ''}
+                ${saleDelivery > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;">
+                    <span style="color:#3b82f6;"><i class="fas fa-truck" style="font-size:10px;margin-right:3px;"></i>Delivery</span>
+                    <span style="color:#3b82f6;">+ ${currency} ${saleDelivery.toLocaleString()}</span>
+                </div>` : ''}
+                <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);font-size:16px;font-weight:800;">
+                    <span>Grand Total</span>
+                    <span style="color:var(--accent);">${currency} ${s.totalAmount.toLocaleString()}</span>
+                </div>
+                ${!isPaid ? `<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px dashed var(--border);margin-top:6px;font-size:14px;font-weight:700;">
+                    <span style="color:#f59e0b;"><i class="fas fa-clock" style="font-size:10px;margin-right:3px;"></i>Amount Due (COD)</span>
+                    <span style="color:#f59e0b;">${currency} ${s.totalAmount.toLocaleString()}</span>
+                </div>` : `<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px dashed var(--border);margin-top:6px;font-size:13px;">
+                    <span style="color:#059669;"><i class="fas fa-check-circle" style="font-size:10px;margin-right:3px;"></i>Amount Due</span>
+                    <span style="color:#059669;">Rs. 0.00</span>
+                </div>`}
+            </div>`;
 
         document.getElementById('sdm-body').innerHTML = `
             <div>
@@ -959,8 +1540,14 @@ window.showSaleDetails = async function(saleId) {
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:18px;">
                     <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:4px;">Customer</div><div style="font-weight:700;">${s.customerName || 'Walking Customer'}</div></div>
                     <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:4px;">Contact</div><div style="font-weight:600;">${s.customerPhone || 'N/A'}</div></div>
+                    <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:4px;">Order Status</div><div style="font-weight:600;text-transform:capitalize;">${(s.orderStatus || 'DELIVERED').toLowerCase()}</div></div>
+                    <div>
+                        <div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:4px;">Payment Status</div>
+                        ${paymentBadgeHTML(s.paymentStatus)}
+                    </div>
                 </div>
-                <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+
+                <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
                     <thead><tr style="border-bottom:2px solid var(--border);">
                         <th style="padding:8px 0;text-align:left;font-size:12px;color:var(--text-muted);">Item</th>
                         <th style="padding:8px 0;text-align:center;font-size:12px;color:var(--text-muted);">Qty</th>
@@ -969,14 +1556,19 @@ window.showSaleDetails = async function(saleId) {
                     </tr></thead>
                     <tbody>${itemsHtml}</tbody>
                 </table>
-                <div style="text-align:right;border-top:2px solid var(--border);padding-top:12px;">
-                    <div style="font-size:13px;color:var(--text-muted);">Grand Total</div>
-                    <div style="font-size:22px;font-weight:800;color:var(--accent);">${currency} ${s.totalAmount.toLocaleString()}</div>
+
+                <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:16px;">
+                    ${totalsHtml}
                 </div>
-                <div style="display:flex;gap:10px;margin-top:16px;">
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="btn btn-outline" style="flex:1;justify-content:center;" onclick="downloadSaleInvoiceJPG('${s._id}');document.getElementById('saleDetailsModal').style.display='none';">
                         <i class="fas fa-download"></i> Download JPG
                     </button>
+                    ${!isPaid ? `
+                    <button class="btn btn-primary" style="flex:1;justify-content:center;background:#059669;border-color:#059669;" onclick="markSalePaid('${s._id}','${s.invoiceNumber}','${(s.customerName||'Walking Customer').replace(/'/g,"\\'")}',${s.totalAmount})">
+                        <i class="fas fa-check-circle"></i> Mark as Paid
+                    </button>` : ''}
                     <button class="btn btn-outline" style="flex:1;justify-content:center;border:none;color:var(--text-muted);" onclick="document.getElementById('saleDetailsModal').style.display='none';">Close</button>
                 </div>
             </div>`;
@@ -1018,12 +1610,61 @@ async function renderSettings() {
                 </div>
 
                 <div class="card">
-                    <h3 style="margin-bottom:20px;color:var(--accent);"><i class="fas fa-globe"></i> Online Shop</h3>
+                    <h3 style="margin-bottom:20px;color:var(--accent);"><i class="fas fa-globe"></i> Online Shop & Style</h3>
                     ${toggleHtml('s_enableOnlineShop','Enable Online Shop', s.enableOnlineShop !== false)}
                     ${toggleHtml('s_showProductImages','Show Product Images', s.showProductImages !== false)}
                     ${toggleHtml('s_showOutOfStock','Show Out-of-Stock Products', s.showOutOfStock === true)}
                     ${toggleHtml('s_showWhatsappOrderBtn','Show WhatsApp Order Button', s.showWhatsappOrderBtn !== false)}
-                    <div class="form-group" style="margin-top:16px;"><label>Theme Color</label><input type="color" id="s_themeColor" value="${s.themeColor||'#00a86b'}" style="height:50px;padding:5px;cursor:pointer;"></div>
+                    
+                    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+                    
+                    <div class="form-group">
+                        <label>Shop Theme Style</label>
+                        <select id="s_shopStyle">
+                            <option value="General" ${s.shopStyle==='General'?'selected':''}>📦 General Store</option>
+                            <option value="Grocery" ${s.shopStyle==='Grocery'?'selected':''}>🛒 Grocery Market</option>
+                            <option value="Fashion" ${s.shopStyle==='Fashion'?'selected':''}>👗 Fashion Boutique</option>
+                            <option value="Electronics" ${s.shopStyle==='Electronics'?'selected':''}>📱 Tech & Electronics</option>
+                            <option value="Beauty" ${s.shopStyle==='Beauty'?'selected':''}>💄 Beauty & Cosmetics</option>
+                        </select>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:16px;">
+                        <div><label style="font-size:12px;margin-bottom:6px;display:block;">Primary Color</label><input type="color" id="s_themeColor" value="${s.themeColor||'#00a86b'}" style="height:44px;width:100%;border-radius:8px;padding:4px;cursor:pointer;background:rgba(255,255,255,0.05);border:1px solid var(--border);"></div>
+                        <div><label style="font-size:12px;margin-bottom:6px;display:block;">Secondary Color</label><input type="color" id="s_secondaryColor" value="${s.secondaryColor||'#0f172a'}" style="height:44px;width:100%;border-radius:8px;padding:4px;cursor:pointer;background:rgba(255,255,255,0.05);border:1px solid var(--border);"></div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:16px;">
+                        <div class="form-group">
+                            <label>Button Style</label>
+                            <select id="s_buttonStyle">
+                                <option value="Rounded" ${s.buttonStyle==='Rounded'?'selected':''}>Rounded</option>
+                                <option value="Pill" ${s.buttonStyle==='Pill'?'selected':''}>Pill (Capsule)</option>
+                                <option value="Sharp" ${s.buttonStyle==='Sharp'?'selected':''}>Sharp (Square)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Product Card Style</label>
+                            <select id="s_productCardStyle">
+                                <option value="Elevated" ${s.productCardStyle==='Elevated'?'selected':''}>Elevated (Shadow)</option>
+                                <option value="Flat" ${s.productCardStyle==='Flat'?'selected':''}>Flat</option>
+                                <option value="Bordered" ${s.productCardStyle==='Bordered'?'selected':''}>Bordered</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Font Theme</label>
+                        <select id="s_fontTheme">
+                            <option value="Inter" ${s.fontTheme==='Inter'?'selected':''}>Inter (Clean, Default)</option>
+                            <option value="Roboto" ${s.fontTheme==='Roboto'?'selected':''}>Roboto (Modern)</option>
+                            <option value="Poppins" ${s.fontTheme==='Poppins'?'selected':''}>Poppins (Geometric, Fashion)</option>
+                            <option value="Outfit" ${s.fontTheme==='Outfit'?'selected':''}>Outfit (Tech, Bold)</option>
+                        </select>
+                    </div>
+
+                    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+
                     <div class="form-group"><label>Banner Message</label><input type="text" id="s_bannerMessage" value="${s.bannerMessage||''}"></div>
                     <div class="form-group"><label>About Text</label><textarea id="s_aboutText" rows="3">${s.aboutText||''}</textarea></div>
                     <div class="form-group"><label>Facebook URL</label><input type="url" id="s_facebookUrl" value="${s.facebookUrl||''}"></div>
@@ -1112,6 +1753,11 @@ window.saveSettings = async function() {
             showOutOfStock: document.getElementById('s_showOutOfStock')?.checked ?? false,
             showWhatsappOrderBtn: document.getElementById('s_showWhatsappOrderBtn')?.checked ?? true,
             themeColor: document.getElementById('s_themeColor')?.value || '#00a86b',
+            secondaryColor: document.getElementById('s_secondaryColor')?.value || '#0f172a',
+            shopStyle: document.getElementById('s_shopStyle')?.value || 'General',
+            buttonStyle: document.getElementById('s_buttonStyle')?.value || 'Rounded',
+            productCardStyle: document.getElementById('s_productCardStyle')?.value || 'Elevated',
+            fontTheme: document.getElementById('s_fontTheme')?.value || 'Inter',
             bannerMessage: document.getElementById('s_bannerMessage')?.value || '',
             aboutText: document.getElementById('s_aboutText')?.value || '',
             facebookUrl: document.getElementById('s_facebookUrl')?.value || '',
@@ -1228,28 +1874,46 @@ window.showOnlineOrderDetails = async function(orderId) {
         const order = res.data.find(x => x._id === orderId || String(x.id) === String(orderId));
         if (!order) throw new Error('Order not found');
         const currency = _settings.currency || 'Rs.';
+        const orderDelivery = parseFloat(order.delivery_cost ?? order.deliveryFee) || 0;
+        const itemsSubtotal = order.items.reduce((s, i) => s + (i.total || 0), 0);
+        const isPaid = String(order.paymentStatus).toUpperCase() === 'PAID';
+
         document.getElementById('sdm-body').innerHTML = `
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                    <h3 style="color:var(--accent);margin:0;">${order.onlineOrderId}</h3>
+                    <h3 style="color:var(--accent);margin:0;">${order.orderNumber || order.onlineOrderId}</h3>
                     <span style="font-size:13px;color:var(--text-muted);">${new Date(order.date).toLocaleString()}</span>
                 </div>
                 <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:16px;">
                     <div style="margin-bottom:10px;"><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;">Customer</div><div style="font-weight:700;">${order.customerName}</div></div>
                     <div style="margin-bottom:10px;"><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;">Address</div><div>${order.deliveryAddress}</div></div>
-                    <div style="display:flex;gap:20px;">
+                    <div style="display:flex;gap:20px;flex-wrap:wrap;">
                         <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;">Payment</div><div style="font-weight:600;">${order.paymentMethod}</div></div>
-                        <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;">Status</div><div style="font-weight:700;text-transform:capitalize;">${order.status}</div></div>
+                        <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;">Status</div><div style="font-weight:700;text-transform:capitalize;">${order.orderStatus || order.status}</div></div>
+                        <div><div style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;">Payment Status</div>${paymentBadgeHTML(order.paymentStatus)}</div>
                     </div>
                 </div>
-                <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+                <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
                     <tbody>${order.items.map(i=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px 0;">${i.name}</td><td style="text-align:center;">×${i.quantity}</td><td style="text-align:right;font-weight:700;color:var(--accent);">${currency} ${i.total.toLocaleString()}</td></tr>`).join('')}</tbody>
                 </table>
-                <div style="text-align:right;border-top:2px solid var(--border);padding-top:12px;margin-bottom:16px;">
-                    <div style="font-size:22px;font-weight:800;color:var(--accent);">${currency} ${order.totalAmount.toLocaleString()}</div>
+                <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;">
+                        <span style="color:var(--text-muted);">Subtotal</span><span>${currency} ${itemsSubtotal.toLocaleString()}</span>
+                    </div>
+                    ${orderDelivery > 0 ? `<div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px;">
+                        <span style="color:#3b82f6;"><i class="fas fa-truck" style="font-size:10px;margin-right:3px;"></i>Delivery</span>
+                        <span style="color:#3b82f6;">+ ${currency} ${orderDelivery.toLocaleString()}</span>
+                    </div>` : ''}
+                    <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);font-size:18px;font-weight:800;">
+                        <span>Grand Total</span><span style="color:var(--accent);">${currency} ${order.totalAmount.toLocaleString()}</span>
+                    </div>
+                    ${!isPaid ? `<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px dashed var(--border);margin-top:6px;font-size:13px;font-weight:700;">
+                        <span style="color:#f59e0b;">Amount Due (COD)</span>
+                        <span style="color:#f59e0b;">${currency} ${order.totalAmount.toLocaleString()}</span>
+                    </div>` : ''}
                 </div>
-                ${order.paymentSlip ? `<a href="${order.paymentSlip}" target="_blank"><img src="${getThumbnailUrl(order.paymentSlip,400)}" style="width:100%;border-radius:8px;border:1px solid var(--border);"></a>` : ''}
-                <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:12px;" onclick="document.getElementById('saleDetailsModal').style.display='none';">Close</button>
+                ${order.paymentSlip ? `<a href="${order.paymentSlip}" target="_blank"><img src="${getThumbnailUrl(order.paymentSlip,400)}" style="width:100%;border-radius:8px;border:1px solid var(--border);margin-bottom:12px;display:block;"></a>` : ''}
+                <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:4px;" onclick="document.getElementById('saleDetailsModal').style.display='none';">Close</button>
             </div>`;
     } catch (err) {
         document.getElementById('sdm-body').innerHTML = `<p style="color:#ef4444;text-align:center;">${err.message}</p>`;
