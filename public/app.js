@@ -1183,7 +1183,7 @@ async function generatePremiumJPG(sale, settings, custName, custPhone) {
         logoEl.style.display = 'block';
     } else { logoEl.style.display = 'none'; }
 
-    document.getElementById('inv-shop-name').innerText = settings.shopName || '';
+    document.getElementById('inv-shop-name').innerText = settings.shopName || 'Shop Name';
     const addrEl = document.getElementById('inv-shop-address');
     if (settings.showAddressOnInvoice && settings.shopAddress) {
         addrEl.innerText = settings.shopAddress; addrEl.style.display = 'block';

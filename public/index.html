@@ -81,35 +81,35 @@
 
     <!-- Hidden Premium Invoice Template -->
     <!-- Hidden Premium Invoice Template -->
-    <div id="invoice-template" style="position: absolute; left: -9999px; width: 550px; padding: 40px; background: white; color: #1e293b; font-family: 'Inter', sans-serif;">
+    <div id="invoice-template" style="position: absolute; left: -9999px; width: 550px; padding: 40px; background: white; color: #1e293b; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         <!-- Header Info -->
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 40px;">
-            <div id="inv-header-left" style="max-width: 300px;">
-                <img id="inv-logo" src="" style="max-height: 60px; margin-bottom: 15px; display: none;">
-                <h1 id="inv-shop-name" style="font-size: 26px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.1;">Shop Name</h1>
-                <p id="inv-shop-address" style="font-size: 13px; color: #64748b; margin: 8px 0 0 0; line-height: 1.4; display: none;">Shop Address</p>
-                <p id="inv-shop-contact" style="font-size: 13px; color: #64748b; margin: 4px 0 0 0; display: none;">Phone: 0000000000</p>
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 30px;">
+            <div id="inv-header-left" style="max-width: 320px;">
+                <img id="inv-logo" src="" style="max-height: 60px; margin-bottom: 12px; display: none;">
+                <h1 id="inv-shop-name" style="font-size: 28px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2; letter-spacing: -0.02em; word-wrap: break-word;">Shop Name</h1>
+                <p id="inv-shop-address" style="font-size: 13px; color: #475569; margin: 6px 0 0 0; line-height: 1.5; display: none; word-wrap: break-word;">Shop Address</p>
+                <p id="inv-shop-contact" style="font-size: 13px; color: #475569; margin: 4px 0 0 0; display: none; word-wrap: break-word;">Phone: 0000000000</p>
             </div>
             <div style="text-align: right;">
-                <div style="display: inline-block; background: #f1f5f9; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Invoice</div>
-                <h2 id="inv-number" style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">#QB-00000</h2>
-                <p id="inv-date" style="font-size: 13px; color: #94a3b8; margin: 5px 0 0 0;">Oct 24, 2023</p>
+                <div style="display: inline-block; background: #f1f5f9; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Invoice</div>
+                <h2 id="inv-number" style="font-size: 17px; font-weight: 700; color: #0f172a; margin: 0;">#QB-00000</h2>
+                <p id="inv-date" style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Oct 24, 2023</p>
             </div>
         </div>
 
         <!-- Bill To Section -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px; padding: 20px; background: #f8fafc; border-radius: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 35px; padding: 22px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;">
             <div>
-                <h4 style="font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 8px;">Billed To</h4>
-                <p id="inv-cust-name" style="font-weight: 700; font-size: 15px; color: #334155; margin: 0;">Customer Name</p>
-                <p id="inv-cust-contact" style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Customer Contact</p>
+                <h4 style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.06em; margin: 0 0 6px 0; font-weight: 700;">Billed To</h4>
+                <p id="inv-cust-name" style="font-weight: 700; font-size: 16px; color: #1e293b; margin: 0; word-wrap: break-word;">Customer Name</p>
+                <p id="inv-cust-contact" style="font-size: 13px; color: #64748b; margin: 4px 0 0 0; word-wrap: break-word;">Customer Contact</p>
             </div>
             <div style="text-align: right;">
-                <h4 style="font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 8px;">Payment Status</h4>
-                <span id="inv-payment-badge" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;">
-                    <i class="fas fa-circle" id="inv-payment-dot" style="font-size: 8px;"></i>
-                    <span id="inv-payment-text">PAID</span>
-                </span>
+                <h4 style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.06em; margin: 0 0 6px 0; font-weight: 700;">Payment Status</h4>
+                <div id="inv-payment-badge" style="display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase;">
+                    <i class="fas fa-circle" id="inv-payment-dot" style="font-size: 8px; margin-right: 6px; vertical-align: middle;"></i>
+                    <span id="inv-payment-text" style="vertical-align: middle;">PAID</span>
+                </div>
             </div>
         </div>
 
@@ -131,25 +131,25 @@
         <!-- Totals -->
         <div style="display: flex; justify-content: flex-end;">
             <div style="width: 280px;">
-                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
+                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #e2e8f0;">
                     <span style="color: #64748b; font-size: 14px;">Subtotal</span>
-                    <span id="inv-subtotal" style="font-weight: 600; font-size: 14px; color: #334155;">Rs. 0</span>
+                    <span id="inv-subtotal" style="font-weight: 600; font-size: 14px; color: #1e293b;">Rs. 0</span>
                 </div>
-                <div id="inv-discount-row" style="display: none; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
+                <div id="inv-discount-row" style="display: none; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #e2e8f0;">
                     <span style="color: #ef4444; font-size: 14px;">Discount</span>
                     <span id="inv-discount" style="font-weight: 600; font-size: 14px; color: #ef4444;">- Rs. 0</span>
                 </div>
-                <div id="inv-delivery-row" style="display: none; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
+                <div id="inv-delivery-row" style="display: none; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed #e2e8f0;">
                     <span style="color: #3b82f6; font-size: 14px;">Delivery</span>
                     <span id="inv-delivery" style="font-weight: 600; font-size: 14px; color: #3b82f6;">+ Rs. 0</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: 15px 0 0 0;">
-                    <span style="font-weight: 800; font-size: 18px; color: #0f172a;">Grand Total</span>
-                    <span id="inv-total" style="font-weight: 800; font-size: 18px; color: #22c55e;">Rs. 0</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; background: #f8fafc; border-radius: 10px; margin-top: 15px;">
+                    <span style="font-weight: 800; font-size: 16px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em;">Grand Total</span>
+                    <span id="inv-total" style="font-weight: 800; font-size: 20px; color: #059669;">Rs. 0</span>
                 </div>
-                <div id="inv-amount-due-row" style="display: flex; justify-content: space-between; padding: 12px 0 0 0; margin-top: 4px; border-top: 1px dashed #e2e8f0;">
-                    <span style="font-weight: 700; font-size: 14px; color: #64748b;">Amount Due</span>
-                    <span id="inv-amount-due" style="font-weight: 800; font-size: 16px; color: #f59e0b;">Rs. 0</span>
+                <div id="inv-amount-due-row" style="display: flex; justify-content: space-between; padding: 14px 20px 0 20px; margin-top: 5px;">
+                    <span style="font-weight: 700; font-size: 13px; color: #64748b; text-transform: uppercase;">Amount Due</span>
+                    <span id="inv-amount-due" style="font-weight: 800; font-size: 15px; color: #d97706;">Rs. 0</span>
                 </div>
             </div>
         </div>
